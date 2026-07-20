@@ -1,4 +1,78 @@
-[ {
+[ 
+  {
+ "timestamp": 1782155947000,
+"tags": ["Control", "Action"],  
+"heading": "",
+"cards": [{
+  "title":"Fixed",
+  "type":"fixed",
+  "points":
+      [
+        "Fixed an issue by adding a hover tooltip for truncated text in the Text Input component.",
+"Fixed localization issues in the Image Upload component.",
+"Fixed an issue where the Dropdown multiselect did not clear and reset correctly.",
+"Fixed a UI issue with the dropdown arrow icon in the Query Builder component.",
+"Fixed an issue where validation did not work correctly for read-only Dropdown fields."
+      ]
+}
+    ]
+  },
+  {
+ "timestamp": 1779477547000,
+"tags": ["Control", "Action"],  
+"heading": "",
+"cards": [{
+  "title":"Fixed",
+  "type":"fixed",
+  "points":
+      [
+"Fixed an issue where the Validate Ctrl action in Form repeat did not properly handle nested controls.",
+"Fixed an issue where the Change State action in Form repeat did not properly handle nested controls.",
+"Fixed an issue where the Remove Property action in Form repeat did not properly handle nested controls.",
+"Fixed an issue where the Set Property action in Form repeat did not properly handle nested controls.",
+"Fixed an issue where the Show Control action in Form repeat did not properly handle nested controls.",
+"Fixed an issue where the Hide Control action in Form repeat did not properly handle nested controls."
+      ]
+    }
+  ]
+},
+{
+ "timestamp": 1775157547000,
+"tags": ["Control", "Action"],  
+"heading": "",
+"cards": [{
+  "title":"Added",
+  "type":"added",
+  "points":[
+    "Added search functionality to the Query Builder dropdown for improved usability.",
+"Added the Validate Ctrl Studio Action to enable validation of controls."
+  ]
+  },{
+  "title":"Enhanced",
+  "type":"improved",
+  "points":
+      [
+"Enhanced the Address component by adding support for dynamic properties.",
+        "Enhanced the Select component by adding support for dynamic properties.",
+        "Enhanced the Detail Select component by adding support for dynamic properties.",
+"Enhanced the Typeahead component by adding support for dynamic properties.",
+"Enhanced the Image Select component by adding support for dynamic properties.",
+"Enhanced the Name component by adding support for dynamic properties.",
+"Enhanced the Link component by adding support for dynamic properties.",
+"Enhanced the Select Bar component by adding support for dynamic properties.",
+"Enhanced the Terms & Conditions component by adding support for dynamic properties.",
+"Enhanced the Rating component by adding support for dynamic properties."
+      ]},{
+      "title": "Fixed",
+      "type": "fixed",
+      "points": [   "Fixed an issue where the Dropdown component's disabled state was not behaving consistently.",
+
+ "Fixed an issue where the Select Bar component could not be selected after removing the read-only property."
+    ]
+    }
+  ]
+},  
+{
  "timestamp": 1773764289000,
 "tags": ["Control", "Action"],  
 "heading": "",
@@ -7,6 +81,8 @@
   "type":"improved",
   "points":
       [
+        "Enhanced the Time module by adding support for dynamic properties.",
+"Enhanced the Dropdown component by handling values containing special characters to improve compatibility.",
         "Enhanced Radio control by adding support for dynamic properties.",
 
 "Enhanced Color Picker by adding support for dynamic properties.",
