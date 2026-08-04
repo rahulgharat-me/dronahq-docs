@@ -1,5 +1,29 @@
 [
   {
+    "timestamp":1785384854000,
+    "tags": [
+      "Self-Hosted",
+      "3.10.3-edge"
+    ],
+    "heading": "Version 3.10.3-edge",
+    "cards": [
+      {
+        "title": "Enhancements ",
+        "type": "improved",
+        "points": ["Enhanced SSO by adding support for multiple domains for JIT authentication and bulk user uploads.",
+"Enhanced app version management by adding support for app version uploads and lifecycle management."]
+      },
+      {
+        "title":"Fixed",
+        "type":"fixed",
+        "points":[
+          "Fixed an issue where apps within folders were incorrectly displayed in the Studio Apps tab.",
+"Fixed an issue where the path parameter toggle in the Connector API sidebar was not retained after reopening."
+        ]
+      }
+    ]
+  },
+  {
     "timestamp":1781849762000,
     "tags": [
       "Self-Hosted",
@@ -8,15 +32,16 @@
     "heading": "Version 3.10.2-edge",
     "cards": [
       {
-        "title": "Added",
-        "type": "added",
-        "points": ["Added support for Vibe Coding to streamline and enhance the development experience."]
+        "title": "Enhancements ",
+        "type": "improved",
+        "points": ["Enhanced the scheduler to handle missed executions and log missed runs for improved reliability."]
       },
       {
         "title":"Fixed",
         "type":"fixed",
         "points":[
-          "Fixed a security vulnerability where folder IDs could be deleted without validating the associated channel."
+          "Fixed a security vulnerability where folder IDs could be deleted without validating the associated channel.",
+          "Fixed an issue where the Table Grid skeleton was displayed on the Menu screen for mobile packages."
         ]
       }
     ]
