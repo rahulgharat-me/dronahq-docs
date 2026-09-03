@@ -1,5 +1,31 @@
 [
   {
+    "timestamp":1788329566000,
+    "tags": [
+      "Self-Hosted",
+      "3.10.5-edge"
+    ],
+    "heading": "Version 3.10.5-edge",
+    "cards": [
+      {
+        "title":"Added",
+        "type":"added",
+        "points":["Added Undo and Redo functionality to Actionflow."]
+      },
+      {
+        "title": "Enhancements ",
+        "type": "improved",
+        "points": ["Enhanced the UI for column formatting for a more intuitive user experience."]
+      },
+      {
+        "title":"Fixed",
+        "type":"fixed",
+        "points":["Fixed an issue by sanitizing HTML characters in Automation log list details to prevent XSS vulnerabilities.",
+"Fixed an issue where folder-assigned apps were incorrectly displayed in the package home app listing."]
+      }
+    ]
+  },
+  {
     "timestamp":1785384854000,
     "tags": [
       "Self-Hosted",
@@ -18,7 +44,8 @@
         "type":"fixed",
         "points":[
           "Fixed an issue where apps within folders were incorrectly displayed in the Studio Apps tab.",
-"Fixed an issue where the path parameter toggle in the Connector API sidebar was not retained after reopening."
+"Fixed an issue where the path parameter toggle in the Connector API sidebar was not retained after reopening.",
+"Fixed an issue where the selected filename was not displayed during SSO bulk uploads."
         ]
       }
     ]
