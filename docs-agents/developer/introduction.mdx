@@ -18,6 +18,17 @@ A typical setup looks like this:
 2. Use the key from your application via the **`api-key`** header.
 3. When something doesn't behave as expected, open **Request Logs** and filter by that key to see exactly which calls hit DronaHQ and how they responded.
 
+## What you can call with a key
+
+| API | Scope needed | What it does |
+|---|---|---|
+| [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) | Voice Agent | Queue one-off outbound calls and track them as a batch |
+| [Campaigns](/agents/voice-agent/api/campaigns) | Voice Agent | Create, schedule, and control outbound campaigns, and add contacts to them |
+
+:::note These are server-to-server APIs
+The `api-key` header is not on the CORS allow-list, so browsers cannot call these endpoints directly. Call them from your backend — and never ship a key to a browser or mobile client, since a key is a workspace-wide secret.
+:::
+
 ## What's Next
 
 - [API Keys](/agents/developer/api-keys) — create, scope, and manage tokens that authenticate your API calls
