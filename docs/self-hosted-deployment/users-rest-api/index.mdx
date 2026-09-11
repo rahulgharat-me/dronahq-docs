@@ -1,0 +1,172 @@
+---
+sidebar_position: 1
+title: Overview
+---
+
+The Users REST API lets external systems manage the end users of your self-hosted DronaHQ account: list and look up users, create users, assign or remove groups, and activate or deactivate users. It is useful for keeping DronaHQ in sync with an HR system, a CRM or any other source of truth for your users.
+
+If you use an identity provider such as Okta or Microsoft Entra, consider the [SCIM 2.0 REST API](/reference/scim-2-rest-api) instead — it covers the same operations using the SCIM standard.
+
+## Base URL
+
+All endpoints are served under the `/api/public` prefix on your [`BUILDER_URL`](/self-hosted-deployment/environment-variables#builder_url-recommended) — the same URL you use to open the admin console:
+
+```
+<BUILDER_URL>/api/public/users
+```
+
+## Authentication
+
+Every request must include your account's **DronaHQ API Key (Account Token)** as a bearer token in the request header:
+
+#### Headers
+<table>
+    <tr>
+        <th>Key</th>
+        <th>Value</th>
+    </tr>
+    <tr>
+        <td>Authorization</td>
+        <td>Bearer &lt;Account API Key&gt;</td>
+    </tr>
+</table>
+
+To find or regenerate the key, go to **Account → Integrations** and look for **DronaHQ API Key (Account Token)**. Only account owners and administrators can view it.
+
+- The key is scoped to a single account. All endpoints operate only on users and groups that belong to that account.
+- Per-app tokens are not accepted by the Users REST API.
+- The key must be sent in the `Authorization` header. Passing it in the request body or as a query parameter is not supported.
+
+A missing or invalid key returns `401`:
+
+```json
+{
+    "error": 401,
+    "message": "Authorization failed.",
+    "reason": "Token not found."
+}
+```
+
+## Endpoints
+
+<table>
+    <tr>
+        <th>Endpoint</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td><a href="/self-hosted-deployment/users-rest-api/list-users">GET /api/public/users</a></td>
+        <td>List users in the account</td>
+    </tr>
+    <tr>
+        <td><a href="/self-hosted-deployment/users-rest-api/get-user">GET /api/public/users/&#123;user_id_or_email&#125;</a></td>
+        <td>Get a single user by id or email</td>
+    </tr>
+    <tr>
+        <td><a href="/self-hosted-deployment/users-rest-api/create-users">POST /api/public/users</a></td>
+        <td>Create or invite up to 50 users</td>
+    </tr>
+    <tr>
+        <td><a href="/self-hosted-deployment/users-rest-api/change-user-groups">PUT /api/public/users/&#123;user_id&#125;/actions/change_group</a></td>
+        <td>Assign groups to a user or remove groups from a user</td>
+    </tr>
+    <tr>
+        <td><a href="/self-hosted-deployment/users-rest-api/activate-users">PUT /api/public/users/activate</a></td>
+        <td>Reactivate deactivated users</td>
+    </tr>
+    <tr>
+        <td><a href="/self-hosted-deployment/users-rest-api/deactivate-users">DELETE /api/public/users/deactivate</a></td>
+        <td>Deactivate users</td>
+    </tr>
+</table>
+
+## User object
+
+The list and get endpoints return users in the following shape:
+
+<table>
+    <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>user_id</td>
+        <td>Integer</td>
+        <td>Unique id of the user</td>
+    </tr>
+    <tr>
+        <td>user_name</td>
+        <td>String</td>
+        <td>Full name of the user</td>
+    </tr>
+    <tr>
+        <td>user_email</td>
+        <td>String</td>
+        <td>Email address of the user</td>
+    </tr>
+    <tr>
+        <td>user_desg</td>
+        <td>String</td>
+        <td>Designation of the user</td>
+    </tr>
+    <tr>
+        <td>user_image_url</td>
+        <td>String</td>
+        <td>Profile image URL of the user</td>
+    </tr>
+    <tr>
+        <td>channel_id</td>
+        <td>Integer</td>
+        <td>Id of the account the user belongs to</td>
+    </tr>
+    <tr>
+        <td>channel_name</td>
+        <td>String</td>
+        <td>Unique name of the account the user belongs to</td>
+    </tr>
+    <tr>
+        <td>app_name</td>
+        <td>String</td>
+        <td>Display name of the account</td>
+    </tr>
+    <tr>
+        <td>user_reg_date</td>
+        <td>String</td>
+        <td>Date and time the user was registered</td>
+    </tr>
+    <tr>
+        <td>user_last_app_activity</td>
+        <td>String</td>
+        <td>Date and time of the user's last app launch. Only populated by the get-user endpoint.</td>
+    </tr>
+    <tr>
+        <td>user_group</td>
+        <td>Array</td>
+        <td>Groups the user belongs to, as <code>&#123; "grp_id": 5, "grp_name": "Sales" &#125;</code> objects</td>
+    </tr>
+    <tr>
+        <td>is_admin</td>
+        <td>Boolean</td>
+        <td><code>true</code> if the user is an account administrator</td>
+    </tr>
+    <tr>
+        <td>stats</td>
+        <td>Object</td>
+        <td>Activity summary — <code>status</code>, <code>available_content</code>, <code>consumed_content</code>, <code>app_timespent</code>. Populated only when stats are requested.</td>
+    </tr>
+</table>
+
+## Errors
+
+Error responses are JSON objects with the HTTP status in `error`, a short `message` and a more specific `reason`:
+
+```json
+{
+    "error": 404,
+    "message": "User not found.",
+    "reason": ""
+}
+```
+
+Several endpoints accept a list of users or groups and process them independently. Those endpoints return `200` even when some entries could not be processed, and report the failed entries in the response body — check the per-endpoint documentation for the exact fields.
