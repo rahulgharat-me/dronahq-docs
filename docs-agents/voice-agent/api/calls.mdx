@@ -1,0 +1,717 @@
+---
+sidebar_position: 3
+title: "Calls"
+---
+
+# Call Data API
+
+The Call Data API reads the results of your **voice calls** — every call a published voice agent handled, whether it came from a campaign, an [outbound dispatch](/agents/voice-agent/api/dispatch), an inbound number, or the web widget. It is the programmatic equivalent of the **Call Logs** screen and the call detail it opens: the same rows, the same tabs, the same numbers.
+
+Every endpoint is a `GET`. Nothing here creates, changes, or deletes anything, so every request is safe to retry.
+
+## When to Use This
+
+- Pull call outcomes into your CRM, data warehouse, or BI tool instead of exporting by hand.
+- Fetch a transcript or a recording for a call your own system knows the ID of.
+- Read what the agent extracted (structured output) and act on it downstream.
+- Audit cost, latency, and the event timeline of a call from your own tooling.
+- Build a campaign report that includes contacts that were **never dialed**, and why.
+
+### Which endpoint answers which question?
+
+| You want | Use |
+|---|---|
+| Every call in a date range, with status, duration, and credits | [List calls](#list-calls) |
+| Everything about one call in a single request | [Get a call](#get-a-call) |
+| Just the conversation, as text or turns | [Get transcript](#get-transcript) |
+| What the agent extracted at the end of the call | [Get structured output](#get-structured-output) |
+| The audio file | [Download recording](#download-recording) |
+| Every dial attempt of a campaign, **including contacts that were never called** | [List attempts](/agents/voice-agent/api/campaigns#list-attempts) on the Campaign API |
+
+## Prerequisites
+
+- An [API Key](/agents/developer/api-keys) with the **Voice Agent** scope. If the key uses a specific **Agent Access** list, only calls handled by agents on that list are visible — the [list](#list-calls) is narrowed to them automatically, and a per-call request for any other agent's call fails with `403`.
+- A `call_id`, for the per-call endpoints. It comes from [List calls](#list-calls), from [List attempts](/agents/voice-agent/api/campaigns#list-attempts) for a campaign, or from the `call_data.call_id` field of the [Post-Webhook](/agents/voice-agent/webhook) payload.
+
+## Authentication
+
+Every request must include the **`api-key`** header — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens.
+
+```
+api-key: sk_<your-secret>
+```
+
+Every call is recorded in [Request Logs](/agents/developer/request-logs), including the failures, with a matching error code.
+
+:::note Base path
+Call endpoints are served at the **root** of your DronaHQ host — `https://<your-dronahq-host>/voice/calls`. There is no `/api/v1` prefix.
+:::
+
+:::warning This is a server-to-server API
+Browsers cannot call these endpoints directly: the `api-key` header is not on the CORS allow-list, so a request from browser JavaScript fails its preflight. Call the API from your backend and never ship an API key to a browser or mobile client — a key is a workspace-wide secret. This applies to the recording endpoint too: proxy the audio through your own server rather than pointing an `<audio>` tag at it.
+:::
+
+## Endpoints
+
+| Method | Path | What it returns |
+|---|---|---|
+| `GET` | `/voice/calls` | [List calls](#list-calls) — the Call Logs table |
+| `GET` | `/voice/calls/{call_id}` | [Get a call](#get-a-call) — the whole call detail in one response |
+| `GET` | `/voice/calls/{call_id}/transcript` | [Get transcript](#get-transcript) — the **Transcripts** tab |
+| `GET` | `/voice/calls/{call_id}/events` | [Get events](#get-events) — the **Logs** tab |
+| `GET` | `/voice/calls/{call_id}/structured_output` | [Get structured output](#get-structured-output) — the **Structured Outputs** tab |
+| `GET` | `/voice/calls/{call_id}/messages` | [Get messages](#get-messages) — the **Messages** tab |
+| `GET` | `/voice/calls/{call_id}/latency` | [Get latency](#get-latency) — the **Latency Summary** tab |
+| `GET` | `/voice/calls/{call_id}/cost` | [Get cost](#get-cost) — the **Call Cost** tab |
+| `GET` | `/voice/calls/{call_id}/recording` | [Download recording](#download-recording) — the audio player |
+
+The per-call endpoints map one-to-one onto the tabs of the call detail in the product, and [Get a call](#get-a-call) returns all of them together. Both are produced by the same code, so a field has the same shape whichever way you fetch it.
+
+For campaigns there is one more read endpoint, documented with the rest of the [Campaign API](/agents/voice-agent/api/campaigns): `GET /voice/campaigns/{campaign_uuid}/attempts`, the campaign's own dial registry.
+
+## Retention
+
+:::warning Call data is kept for 30 days
+Every endpoint on this page reads from call telemetry that expires **30 days after the call started**. After that the call is gone, not hidden: it drops out of the list and every per-call endpoint returns `404`, including the recording.
+
+Pull what you need into your own storage within that window. If you run campaigns, the [attempts endpoint](/agents/voice-agent/api/campaigns#list-attempts) is permanent and still lists the attempt and its outcome after the 30 days, without the transcript, timings, or recording.
+:::
+
+## Pagination
+
+The two list-shaped responses — [List calls](#list-calls) and [Get events](#get-events) — page with `limit` and `offset` and report `has_more`. There is no `total`.
+
+:::warning Page on `has_more`, never on page length
+Keep requesting with `offset += limit` while `has_more` is `true`. Do not stop because a page came back shorter than `limit`.
+:::
+
+---
+
+## List calls
+
+`GET /voice/calls`
+
+Every call the key can see, newest first — with the same columns as the Call Logs table, including the credits breakdown.
+
+### Query parameters
+
+All optional. Parameters marked *repeatable* can be given more than once (`?type=web&type=inbound-phone`) and are ORed.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `agent_uuid` | string, repeatable | — | Only calls handled by these agents. A key with an Agent Access list may only name agents on it (`403` otherwise) |
+| `campaign_uuid` | string | — | Only calls placed by this campaign |
+| `start_datetime` | ISO-8601 datetime | — | Calls that **started** at or after this instant |
+| `end_datetime` | ISO-8601 datetime | — | Calls that **started** at or before this instant |
+| `status` | string | — | `completed` or `failed` |
+| `type` | string, repeatable | — | `web`, `inbound-phone`, `outbound-phone` |
+| `direction` | string, repeatable | — | `inbound`, `outbound` |
+| `ended_reason` | string, repeatable | — | Exact match on the [end reason](#end-reasons) |
+| `hangup_cause_code` | string, repeatable | — | The carrier's hangup code, e.g. `4000` |
+| `hangup_source` | string, repeatable | — | Who hung up per the carrier, e.g. `Callee` |
+| `search` | string | — | Substring match on `call_id` |
+| `sort_key` | string | `start_time` | `start_time`, `duration_ms`, or `cost` |
+| `sort_dir` | string | `desc` | `asc` or `desc` |
+| `limit` | integer | `25` | 1–500 |
+| `offset` | integer | `0` | For paging |
+
+:::tip Always send a date range
+Both bounds are optional — without them the first page is simply the newest calls — but a bounded window is what makes a call-log query cheap and what a report actually wants. Timestamps without an offset are read as **UTC**; `2026-09-01T00:00:00+05:30` is honored as-is. A `start_datetime` later than `end_datetime` is rejected with `422`.
+:::
+
+:::note Unrecognized filter values return nothing, not an error
+`status` accepts only `completed` and `failed`; anything else is ignored. The repeatable filters are exact matches, so a typo in `type` or `ended_reason` returns an empty page rather than a `400`.
+:::
+
+### Example request
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls?start_datetime=2026-09-01T00:00:00Z&end_datetime=2026-09-30T23:59:59Z&limit=25&offset=0' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+Only one campaign's calls, failed ones first:
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls?campaign_uuid=<campaign-uuid>&status=failed&limit=100' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_logs": [
+    {
+      "id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+      "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+      "agent_uuid": "a1d3...",
+      "agent_name": null,
+      "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+      "has_recording": true,
+      "tools_used": 1,
+      "user_number": "+919876543210",
+      "from_number": "+918041234567",
+      "to_number": "+919876543210",
+      "type": "outbound-phone",
+      "direction": "outbound",
+      "end_reason": "customer-ended-call",
+      "end_reason_detail": "",
+      "hangup_cause_code": "4000",
+      "hangup_cause_name": "Normal Hangup",
+      "hangup_source": "Callee",
+      "stir_verification": "",
+      "answered_by": "human",
+      "status": "completed",
+      "start_time": "2026-09-16T04:12:09.120000+00:00",
+      "end_time": "2026-09-16T04:13:01.004000+00:00",
+      "duration_ms": 51884,
+      "cost": 0.0,
+      "credits": 1.42,
+      "llm_credits": 0.91,
+      "stt_credits": 0.27,
+      "tts_credits": 0.24,
+      "structured_output_credits": 0.0
+    }
+  ],
+  "has_more": true
+}
+```
+
+### The call object
+
+Every row of the list, and the base of [Get a call](#get-a-call).
+
+| Field | Type | Description |
+|---|---|---|
+| `call_id` | string | The call's identifier. `id` is the same value |
+| `agent_uuid` | string | The voice agent that handled the call |
+| `agent_name` | null | Always `null` on this API — look the agent up by `agent_uuid` |
+| `campaign_uuid` | string or null | The campaign that placed the call; `null` for dispatch, inbound, and web calls |
+| `has_recording` | boolean | Whether [Download recording](#download-recording) has something to return |
+| `tools_used` | integer | How many tool calls the agent made |
+| `user_number` | string or null | The **customer's** number — `to_number` on an outbound call, `from_number` on an inbound one. `null` for web calls |
+| `from_number` / `to_number` | string or null | The two legs as dialed |
+| `type` | string | `web`, `inbound-phone`, or `outbound-phone` |
+| `direction` | string | `inbound` or `outbound` |
+| `end_reason` | string | Why the call ended — see [End reasons](#end-reasons) |
+| `end_reason_detail` | string | The provider's own words when a dial failed; empty otherwise |
+| `hangup_cause_code` / `hangup_cause_name` / `hangup_source` | string | The carrier's disconnect metadata. Empty when the provider sent none |
+| `stir_verification` | string | STIR/SHAKEN attestation as reported by Twilio; empty on other providers |
+| `answered_by` | string | Answering-machine detection on an outbound dial: `human`, `machine`, or empty when not classified |
+| `status` | string | `completed` or `failed` |
+| `start_time` / `end_time` | ISO-8601 or null | UTC |
+| `duration_ms` | integer or null | Talk time in milliseconds; `0` or `null` for a call that never connected |
+| `credits` | number or null | Total credits billed for the call |
+| `llm_credits` / `stt_credits` / `tts_credits` / `structured_output_credits` | number or null | The split of `credits` by cost center — the same four the **Call Cost** tab shows |
+| `cost` | number | Legacy field, always `0.0`. Use `credits` |
+
+:::note Credits can be `null`
+Credits are looked up from the billing system per call when you request the list. When that lookup is unavailable the four credit fields are `null` — never a fake `0`. A call that never engaged the agent (`no-answer`, `busy`, `failed-dial`, …) is a genuine `0`.
+:::
+
+### End reasons
+
+`end_reason` is a closed vocabulary set by the platform, so you can filter and group on it:
+
+| Value | Meaning |
+|---|---|
+| `customer-ended-call` | The caller hung up |
+| `agent-ended-call` | The agent ended the call after completing its objective |
+| `silence-timeout` | Nobody spoke for the configured silence window |
+| `max-duration-reached` | The agent's maximum call duration was hit |
+| `voicemail-detected` / `amd-machine-detected` | Voicemail or an answering machine picked up |
+| `transferred` / `transfer-completed` | The call was handed to a human |
+| `no-answer` / `busy` / `declined` / `failed-dial` / `carrier-hangup` | The dial did not connect, or the carrier ended it — `end_reason_detail` and the `hangup_cause_*` fields carry the carrier's reason |
+| `agent-error` / `transcriber-error` / `llm-error` / `tts-error` / `transport-error` / `worker-shutdown` | The platform ended the call |
+
+:::note Twilio numbers report SIP phrases for unconnected dials
+On calls placed through Twilio, the coarse `no-answer` / `busy` / `failed-dial` / `carrier-hangup` buckets are replaced by the SIP response phrase, slugified — a 480 is `temporarily-unavailable`, a 486 is `busy-here`. Filter on the values you actually see in your own data rather than assuming the list above is exhaustive for Twilio.
+:::
+
+---
+
+## Get a call
+
+`GET /voice/calls/{call_id}`
+
+One call in full, in a single request: the [call object](#the-call-object) plus everything the per-call endpoints below return separately.
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call": {
+    "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+    "agent_uuid": "a1d3...",
+    "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+    "status": "completed",
+    "end_reason": "customer-ended-call",
+    "duration_ms": 51884,
+    "credits": 1.42,
+
+    "provider": "plivo",
+    "agent_version_id": "v7",
+    "transcript_text": "Agent: Hello Rahul, I'm calling about your pending payment of 1500 rupees.\nUser: Yes, I'll pay today.\nAgent: Thank you. I've noted that. Goodbye!\n",
+    "messages": [
+      { "role": "agent", "content": "Hello Rahul, I'm calling about your pending payment of 1500 rupees.", "time_ms": 1900, "seconds_from_start": 1.9, "duration_ms": 4100, "tool_calls": [] },
+      { "role": "user", "content": "Yes, I'll pay today.", "time_ms": 7200, "seconds_from_start": 7.2, "duration_ms": 1300, "tool_calls": [] }
+    ],
+    "structured_output": [
+      { "id": "so_payment_confirmed", "name": "payment_confirmed", "schema_type": "boolean", "status": "success", "result": true, "reason": null }
+    ],
+    "latency": {
+      "turnLatencyAverage": 812,
+      "transcriberLatencyAverage": 210,
+      "modelLatencyAverage": 380,
+      "voiceLatencyAverage": 222,
+      "turnLatencies": [
+        { "turnId": "t1", "transcriberLatency": 205, "endpointingLatency": 188, "modelFirstTokenLatency": 240, "modelTotalLatency": 371, "voiceFirstAudioLatency": 219, "turnLatency": 795 }
+      ]
+    },
+    "consumption": {
+      "llm": { "input_tokens": 3120, "cached_input_tokens": 0, "output_tokens": 214, "model": "gpt-4o-mini", "provider": "openai" },
+      "stt": { "duration_seconds": 51.9, "model": "nova-3", "provider": "deepgram" },
+      "tts": { "character_count": 148, "model": "eleven_flash_v2_5", "provider": "elevenlabs" },
+      "structured_output": { "input_tokens": 412, "output_tokens": 6, "model": "gpt-4o-mini", "provider": "openai" }
+    },
+    "consumption_detail": {
+      "billed": { "llm": { "input_tokens": 3120, "output_tokens": 214, "provider": "openai", "model": "gpt-4o-mini" } },
+      "unbilled": { "skills": {}, "customer_key": {} },
+      "tts_verification": {}
+    },
+    "variables": {
+      "customer_name": "Rahul",
+      "outstanding_amount": "1500",
+      "dispatch": {
+        "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+        "campaign_row_index": 12,
+        "campaign_fields": { "number": "+919876543210", "customer_name": "Rahul", "outstanding_amount": "1500" },
+        "is_alternate_number": false
+      }
+    },
+    "campaign_fields": { "number": "+919876543210", "customer_name": "Rahul", "outstanding_amount": "1500" }
+  }
+}
+```
+
+Shortened: every field of the [call object](#the-call-object) is present, and each nested payload is the complete object its own endpoint returns — see the sections below for the full shapes.
+
+### What it adds to the call object
+
+| Field | Same as | Description |
+|---|---|---|
+| `provider` | — | The telephony provider that carried the call (`plivo`, `twilio`, …); empty for web calls |
+| `agent_version_id` | — | The published version of the agent that took the call |
+| `transcript_text` | `/transcript?format=text` | The rendered `User: … / Agent: …` transcript |
+| `messages` | `/messages` | The raw per-turn message log |
+| `structured_output` | `/structured_output` | The extraction results |
+| `latency` | `/latency` | Per-turn latencies and averages |
+| `consumption`, `consumption_detail` | `/cost` | Raw usage and its billed / unbilled split. Credits are on the call object itself |
+| `variables` | — | The variable map the agent ran with — your dynamic variables, plus a `dispatch` block on campaign and dispatch calls |
+| `campaign_fields` | — | For a campaign call, the contact's CSV row, lifted out of `variables.dispatch` so you need not know the nesting. `null` otherwise |
+
+:::note Two things are not in this response
+**Events** — the timeline can run to hundreds of rows, so it is only available paged from [Get events](#get-events). **The recording** — audio, from [Download recording](#download-recording). `has_recording` tells you whether there is one.
+:::
+
+---
+
+## Get transcript
+
+`GET /voice/calls/{call_id}/transcript`
+
+The conversation, in one of three shapes. Pick with `format`.
+
+| `format` | Returns | Use it when |
+|---|---|---|
+| `text` (default) | `transcript` — one string, `User: …` / `Agent: …` lines | You want to display or store the transcript as-is |
+| `turns` | `turns` — the spoken lines as `[{role, text, seconds_from_start, duration_ms}]` | You want to process it turn by turn |
+| `full` | `messages` — the raw per-turn log, identical to [Get messages](#get-messages) | You need tool calls, word confidences, or unspoken model output |
+
+Only the key for the requested format is present in the response; the other two are omitted, not `null`.
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/transcript?format=turns' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "format": "turns",
+  "turns": [
+    { "role": "agent", "text": "Hello Rahul, I'm calling about your pending payment of 1500 rupees.", "seconds_from_start": 1.9, "duration_ms": 4100 },
+    { "role": "user", "text": "Yes, I'll pay today.", "seconds_from_start": 7.2, "duration_ms": 1300 },
+    { "role": "agent", "text": "Thank you. I've noted that. Goodbye!", "seconds_from_start": 9.4, "duration_ms": 2200 }
+  ]
+}
+```
+
+`turns` contains only what was actually said on the call — `role` is `user` or `agent` — ordered by `seconds_from_start`. A call with no conversation (never connected, or the agent has transcripts disabled) still returns `200`, with an empty `transcript`, `turns`, or `messages`. An unknown `format` is a `422`.
+
+---
+
+## Get events
+
+`GET /voice/calls/{call_id}/events`
+
+The call's event timeline — what the **Logs** tab shows. Every pipeline, telephony, transcriber, model, voice, tool, webhook, and skill event in order, each with the turn it belongs to and structured attributes.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | `1000` | 1–5000 |
+| `offset` | integer | `0` | For paging |
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/events?limit=1000&offset=0' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "events": [
+    {
+      "timestamp": "2026-09-16T04:12:16.902000+00:00",
+      "seq": 41,
+      "category": "transcriber",
+      "event_name": "stt.final_transcript",
+      "turn_id": "t2",
+      "span_id": "sp-41",
+      "parent_span_id": null,
+      "severity": "info",
+      "body": "Yes, I'll pay today.",
+      "attributes": { "language": "en", "confidence": 0.97, "latency_ms": 205 },
+      "consumption": null,
+      "skill_selection": null,
+      "skill_execution": null,
+      "skill_extraction": null
+    },
+    {
+      "timestamp": "2026-09-16T04:12:17.288000+00:00",
+      "seq": 42,
+      "category": "model",
+      "event_name": "llm.generation",
+      "turn_id": "t2",
+      "span_id": "sp-42",
+      "parent_span_id": "sp-41",
+      "severity": "info",
+      "body": "Thank you. I've noted that. Goodbye!",
+      "attributes": { "model": "gpt-4o-mini", "first_token_ms": 240, "total_ms": 371 },
+      "consumption": { "input_tokens": 1180, "output_tokens": 12 },
+      "skill_selection": null,
+      "skill_execution": null,
+      "skill_extraction": null
+    }
+  ],
+  "has_more": false
+}
+```
+
+| Field | Description |
+|---|---|
+| `seq` | Position in the timeline — sort on this, not on `timestamp` |
+| `category` | `call`, `telephony`, `pipeline`, `transcriber`, `model`, `voice`, `knowledge_base`, `memory`, `latency`, `transport`, `structured_output`, `webhook`, `skill`, `system` |
+| `event_name` | The specific event within the category, e.g. `stt.final_transcript` |
+| `turn_id` | Groups the events of one conversational turn; `null` for call-level events |
+| `span_id` / `parent_span_id` | Trace nesting, where the event is part of a span |
+| `severity` | `debug`, `info`, `warn`, `error`, `fatal` |
+| `body` | A human-readable line, where the event has one |
+| `attributes` | Structured detail, specific to the event |
+| `consumption` | Tokens or units consumed by this event, where a model ran |
+| `skill_selection` / `skill_execution` / `skill_extraction` | Present on skill events only |
+
+:::note A typical call has hundreds of events
+Page with `offset` / `limit` and `has_more`. The default `limit` of 1000 covers most calls in one request.
+:::
+
+---
+
+## Get structured output
+
+`GET /voice/calls/{call_id}/structured_output`
+
+The end-of-call extraction results — what the **Structured Outputs** tab shows. One entry per structured output configured on the agent. An agent with none configured returns an empty list.
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/structured_output' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "structured_output": [
+    {
+      "id": "so_payment_confirmed",
+      "name": "payment_confirmed",
+      "input_type": "ai",
+      "schema_type": "boolean",
+      "status": "success",
+      "result": true,
+      "reason": null,
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "metrics": { "input_tokens": 412, "output_tokens": 6, "total_tokens": 418 },
+      "last_committed_at": "2026-09-16T04:13:03Z"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `id` / `name` | The structured output as configured on the agent |
+| `schema_type` | The type `result` is cast to — `boolean`, `string`, `enum`, `number`, `integer`, `array`, or `object` |
+| `status` | `success`, `skipped`, `failed`, or `pending` — see below |
+| `result` | The extracted value. Only meaningful when `status` is `success` |
+| `reason` | Why extraction failed or was skipped |
+| `model` / `provider` / `metrics` | What ran the extraction and what it consumed |
+
+:::warning Read `status` before `result`
+| `status` | Meaning |
+|---|---|
+| `success` | `result` holds the extracted value, typed per `schema_type` |
+| `skipped` | There was no conversation to extract from — `result` is empty |
+| `failed` | Extraction ran and failed; `reason` says why |
+| `pending` | The extraction step never got to mark this output — treat as unknown |
+
+`result` on anything but `success` is not a value your system should act on.
+:::
+
+---
+
+## Get messages
+
+`GET /voice/calls/{call_id}/messages`
+
+The raw per-turn message log — what the **Messages** tab shows. Unlike the transcript this includes every role: the system prompt, what the model generated but never said aloud, tool calls and their results, with timing, word-level confidences, and the skill that was driving each turn. The same array [Get transcript](#get-transcript) returns for `format=full`.
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/messages' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "messages": [
+    {
+      "role": "agent",
+      "content": "Hello Rahul, I'm calling about your pending payment of 1500 rupees.",
+      "time_ms": 1900,
+      "seconds_from_start": 1.9,
+      "duration_ms": 4100,
+      "tool_calls": []
+    },
+    {
+      "role": "user",
+      "content": "Yes, I'll pay today.",
+      "time_ms": 7200,
+      "seconds_from_start": 7.2,
+      "duration_ms": 1300,
+      "tool_calls": []
+    }
+  ]
+}
+```
+
+| `role` | Meaning |
+|---|---|
+| `system` | The system prompt the agent ran with |
+| `user` | Something the caller said |
+| `agent` | Something the agent said aloud |
+| `agent-unspoken` | A reply the model generated (and was billed for) that the caller never heard — superseded by an interruption or a re-fire |
+| `tool-call` / `tool-result` | A tool the agent invoked, and what came back |
+
+Only `user` and `agent` make it into the transcript. Use this endpoint when you need the rest.
+
+---
+
+## Get latency
+
+`GET /voice/calls/{call_id}/latency`
+
+Per-turn latency and the call's averages, in milliseconds — what the **Latency Summary** tab shows.
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/latency' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "latency": {
+    "turnLatencyAverage": 812,
+    "transcriberLatencyAverage": 210,
+    "modelLatencyAverage": 380,
+    "voiceLatencyAverage": 222,
+    "endpointingLatencyAverage": 190,
+    "numAssistantInterrupted": 0,
+    "turnLatencies": [
+      {
+        "turnId": "t1",
+        "transcriberLatency": 205,
+        "endpointingLatency": 188,
+        "modelFirstTokenLatency": 240,
+        "modelTotalLatency": 371,
+        "voiceFirstAudioLatency": 219,
+        "turnLatency": 795
+      }
+    ]
+  }
+}
+```
+
+`turnLatencies[]` breaks each turn into transcriber, endpointing, model (first token and total), and voice (first audio) timings; `turnLatency` is the caller-perceived gap. The `*Average` fields roll them up. `latency` is `null` for a call that never reached the agent.
+
+---
+
+## Get cost
+
+`GET /voice/calls/{call_id}/cost`
+
+What the call cost and what it consumed — what the **Call Cost** tab shows.
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/cost' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "credits": { "total": 1.42, "llm": 0.91, "stt": 0.27, "tts": 0.24, "structured_output": 0.0 },
+  "consumption": {
+    "llm": { "input_tokens": 3120, "cached_input_tokens": 0, "output_tokens": 214, "model": "gpt-4o-mini", "provider": "openai" },
+    "stt": { "duration_seconds": 51.9, "model": "nova-3", "provider": "deepgram" },
+    "tts": { "character_count": 148, "model": "eleven_flash_v2_5", "provider": "elevenlabs" },
+    "structured_output": { "input_tokens": 412, "output_tokens": 6, "model": "gpt-4o-mini", "provider": "openai" }
+  },
+  "consumption_detail": {
+    "billed": {
+      "llm": { "input_tokens": 3120, "output_tokens": 214, "provider": "openai", "model": "gpt-4o-mini" },
+      "stt": { "duration_seconds": 51.9, "provider": "deepgram", "model": "nova-3" },
+      "tts": { "character_count": 148, "provider": "elevenlabs", "model": "eleven_flash_v2_5" },
+      "structured_output": { "input_tokens": 412, "output_tokens": 6, "provider": "openai", "model": "gpt-4o-mini" }
+    },
+    "unbilled": { "skills": {}, "customer_key": {} },
+    "tts_verification": {}
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `credits` | The billed breakdown — `total` and its four components, the same figures as the list row's `credits` / `*_credits`. Each value is `null`, never `0`, when the billing lookup is unavailable |
+| `consumption` | Raw usage per cost center — tokens, STT seconds, TTS characters — with the provider and model that produced it. This is the **Quantity** view of the Call Cost tab |
+| `consumption_detail` | The same usage split into `billed` and `unbilled` (usage covered by your own provider keys, or by skills) |
+
+---
+
+## Download recording
+
+`GET /voice/calls/{call_id}/recording`
+
+The call recording as an MP3, streamed straight back to you. No link is generated and nothing is left publicly reachable — the bytes go to the caller holding the key and nowhere else.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `channel` | string | `stereo` | Which mix to return. `stereo` is the only channel produced today; `combined`, `user`, and `agent` are accepted and return `404` |
+| `download` | boolean | `false` | `true` adds `Content-Disposition: attachment` so a browser saves the file as `recording-<call_id>-<channel>.mp3` |
+
+### Headers
+
+| Header | Direction | Description |
+|---|---|---|
+| `Range` | request | Optional. Standard byte range (`bytes=0-1048575`); the response is `206 Partial Content` with `Content-Range`, so a player can seek and a download can resume |
+| `Accept-Ranges` | response | Always `bytes` |
+| `Content-Length` | response | The size of the body (or of the range) |
+| `Content-Type` | response | `audio/mpeg` |
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/calls/<call-id>/recording?channel=stereo&download=true' \
+  -H 'api-key: sk_your-generated-secret-here' \
+  -o recording-<call-id>.mp3
+```
+
+:::tip Check `has_recording` first
+A call that never connected, or one handled by an agent with recording turned off, has no audio and returns `404` with `no stereo recording for this call`. `has_recording` on the [call object](#the-call-object) tells you before you ask.
+
+A second `404`, `recording not yet available`, means the call *did* record but the upload has not landed yet — this is normal in the first minute or two after a call ends. Retry shortly.
+:::
+
+---
+
+## Getting a `call_id` for a campaign call
+
+The list above only contains dials that were **actually placed** — answered or not. A campaign contact whose number was invalid, who was skipped by the calling window, or whose dial could not be handed to the carrier never becomes a call, and a contact that was retried is several calls.
+
+For campaigns, start from `GET /voice/campaigns/{campaign_uuid}/attempts` instead — [documented with the Campaign API](/agents/voice-agent/api/campaigns#list-attempts). It lists every dial attempt from the campaign's own registry, permanently, including the contacts that were never dialed and why, and each dialed attempt carries the `call_id` to fetch here.
+
+---
+
+## Errors
+
+| HTTP status | Cause | Fix |
+|---|---|---|
+| `400` | Unknown `channel` on the recording endpoint | Use `stereo` |
+| `401` / `403` | Auth failure on the API key | See the error-code chip in [Request Logs](/agents/developer/request-logs) (`missing_token`, `invalid_token`, `disabled`, `expired`, `scope_denied`, `agent_denied`) |
+| `403` | The call's agent is not on the key's **Agent Access** list, or `agent_uuid` on the list names such an agent | Use a key that covers the agent |
+| `404` | No such call, the call is older than 30 days, or the recording is missing | A call from another workspace is also a `404`, deliberately. For the two recording cases see [Download recording](#download-recording) |
+| `416` | The `Range` header asks for bytes past the end of the recording | Check `Content-Length` |
+| `422` | `start_datetime` after `end_datetime`, a bad datetime, or an unknown transcript `format` | Fix the parameter; the message names it |
+
+:::note A call whose agent was deleted is not reachable through this API
+The key's permissions are checked against the call's voice agent, so if that agent has since been deleted the request fails with `403`. The call is still visible in the **Call Logs** screen. This fails closed on purpose — the alternative is a key reaching a call its access list can no longer be evaluated against.
+:::
+
+## Limits
+
+| Limit | Default |
+|---|---|
+| Calls per page | **500** (default 25) |
+| Events per page | **5000** (default 1000) |
+| Call data retention | **30 days** from the call's start |
+
+:::note Phone numbers are returned as dialed
+`user_number`, `from_number`, and `to_number` are full E.164 numbers, exactly as the Call Logs screen shows them. Treat responses from this API as personal data in your own storage and access controls.
+:::
+
+## What's Next
+
+- [Campaign API — List attempts](/agents/voice-agent/api/campaigns#list-attempts) — every dial of a campaign, including contacts never called
+- [Post-call Webhook](/agents/voice-agent/webhook) — get pushed the same data when a call ends, instead of polling
+- [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) — placing the calls this API reads back
+- [Request Logs](/agents/developer/request-logs) — debugging what your integration actually sent
