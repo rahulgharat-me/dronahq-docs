@@ -1,0 +1,656 @@
+---
+sidebar_position: 2
+title: "Campaigns"
+---
+
+# Campaign API
+
+The Campaign API creates and controls **outbound voice campaigns** — a list of contacts dialed by a published voice agent, optionally scheduled, with auto-retry and full pause / resume / stop control. It is the programmatic equivalent of the **Campaigns** screen: the same rules, the same lifecycle, the same results.
+
+## When to Use This
+
+- Launch campaigns from your CRM, scheduler, or data pipeline instead of uploading a CSV by hand.
+- Add contacts to a campaign that already exists, as leads arrive.
+- Pause, resume, or stop a running campaign from your own systems.
+- Poll a campaign's progress and per-contact outcomes — including the contacts that were never dialed, and why.
+
+For the calls themselves — transcripts, structured output, cost, recordings — see the [Call Data API](/agents/voice-agent/api/calls).
+
+### Campaigns or Dispatch?
+
+Both place outbound calls, and picking the wrong one is the most common mistake.
+
+| | [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) | **Campaign API** |
+|---|---|---|
+| Unit of work | A batch of numbers | A durable, named campaign |
+| Lives on after the calls | No | Yes — with logs, recordings, and metrics |
+| Scheduling | No | Yes, with a daily calling window |
+| Auto-retry | Per-call retry budget | Configurable retry waves and outcomes |
+| Per-contact variables | `dynamic_variables` on the request | Any CSV column |
+| Pause / resume / stop | No | Yes |
+| Best for | Transactional, one-off calls (an OTP callback, a triggered alert) | Outreach to a list you want to measure |
+
+Rule of thumb: if someone will later ask *"how did that campaign do?"*, use this API.
+
+## Prerequisites
+
+- A **published** voice agent. Drafts and unpublished agents fail with `404` — publishing is what creates the snapshot campaigns dial against.
+- A phone number registered in your workspace to dial **from**.
+- An [API Key](/agents/developer/api-keys) with the **Voice Agent** scope. If the key uses a specific **Agent Access** list, the campaign's agent must be on it.
+
+## Authentication
+
+Every request must include the **`api-key`** header — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens.
+
+```
+api-key: sk_<your-secret>
+```
+
+Every call is recorded in [Request Logs](/agents/developer/request-logs), including the failures, with a matching error code.
+
+:::note Base path
+Campaign endpoints are served at the **root** of your DronaHQ host — `https://<your-dronahq-host>/voice/campaigns`. There is no `/api/v1` prefix.
+:::
+
+:::warning This is a server-to-server API
+Browsers cannot call these endpoints directly: the `api-key` header is not on the CORS allow-list, so a request from browser JavaScript fails its preflight. Call the API from your backend and never ship an API key to a browser or mobile client — a key is a workspace-wide secret.
+:::
+
+## Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/voice/campaigns` | [Create a campaign](#create-a-campaign) |
+| `GET` | `/voice/campaigns` | [List campaigns](#list-campaigns) |
+| `GET` | `/voice/campaigns/{campaign_uuid}` | [Get one campaign](#get-a-campaign) |
+| `GET` | `/voice/campaigns/{campaign_uuid}/attempts` | [List attempts](#list-attempts) — every dial, including contacts never called |
+| `POST` | `/voice/campaigns/{campaign_uuid}/contacts/append` | [Add contacts](#add-contacts) |
+| `POST` | `/voice/campaigns/{campaign_uuid}/launch` | [Launch staged contacts](#launch) |
+| `POST` | `/voice/campaigns/{campaign_uuid}/pause` | [Pause](#pause--resume) |
+| `POST` | `/voice/campaigns/{campaign_uuid}/resume` | [Resume](#pause--resume) |
+| `POST` | `/voice/campaigns/{campaign_uuid}/stop` | [Stop](#stop) |
+| `POST` | `/voice/campaigns/{campaign_uuid}/cancel` | [Cancel](#cancel) |
+
+## Idempotency
+
+`POST /voice/campaigns`, `contacts/append`, and `launch` accept an optional **`Idempotency-Key`** header. Send one and the request becomes safe to retry: the work happens once, and every later request carrying the same key gets the original response back.
+
+```
+Idempotency-Key: order-4821-campaign
+```
+
+:::tip Send a key on every create
+This is the endpoint where a retry is most expensive. Without a key, a client that retries a timeout — which is what most HTTP libraries do by default — creates a **second campaign holding the whole contact list**, and both of them dial. Nothing in either success response says it happened.
+:::
+
+How it behaves:
+
+| Situation | Result |
+|---|---|
+| Same key, same request | `200` with the original response replayed. Nothing runs twice. |
+| Same key, **different** request | `409` — a key identifies one operation. Generate a new key. |
+| Same key, first request still running | `409` with `Retry-After`. Retry in a few seconds to collect the result. |
+| Same key after the request **failed** | The key is freed, so the retry genuinely runs. A `409` on an invalid transition never gets cached. |
+| Key omitted | No protection. The request runs every time it arrives. |
+
+Details worth knowing:
+
+- **Keys are scoped to your workspace.** Two workspaces can use the same key value without colliding.
+- **One namespace across endpoints.** Reusing a create's key on an append is a `409`, not two separate reservations. One logical operation, one key.
+- **Responses stay replayable for 24 hours.**
+- **Uploaded file contents are not compared** — only the other form fields and the filename. Two different CSVs sent under one key and one filename replay the first result.
+- **Keys are at most 255 characters**; empty or longer values are rejected with `400` rather than silently ignored.
+- **If the key store is unreachable, the request is refused with `503`** rather than run unprotected. You asked for exactly-once, so it is not quietly downgraded. Retry, or omit the header to proceed without protection.
+
+Use any stable string your system can regenerate on retry — an order ID, a job ID from your scheduler, or a UUID you store before making the call.
+
+---
+
+## Create a campaign
+
+`POST /voice/campaigns`
+
+Creates a campaign from a CSV of contacts. Launches immediately, or arms a schedule.
+
+### Headers
+
+| Header | Required | Description |
+|---|---|---|
+| `api-key` | Yes | Your API key secret (must have **Voice Agent** scope) |
+| `Content-Type` | Yes | `multipart/form-data` |
+| `Idempotency-Key` | No | Strongly recommended — see [Idempotency](#idempotency) |
+
+### Form fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `campaign_name` | string | Yes | 1–255 characters |
+| `agent_uuid` | string | Yes | UUID of the **published** voice agent |
+| `from_phone_uuid` | string | Yes | UUID of the number to dial from |
+| `csv_file` | file | Yes | Contact list, up to **5 MB** |
+| `schedule_enabled` | boolean | No | `false` (default) launches immediately. `true` requires the two fields below. |
+| `scheduled_start_local` | string | If scheduled | Wall clock `YYYY-MM-DDTHH:mm`, **no timezone offset** — it is interpreted in the timezone below |
+| `schedule_config` | JSON string | If scheduled | `{"timezone": "Asia/Kolkata"}`, optionally with a `daily_window`. The timezone must be a **canonical IANA name** — see below |
+| `call_settings` | JSON string | No | Variable mapping and auto-retry configuration |
+
+:::caution Use canonical IANA timezone names
+Legacy aliases such as `Asia/Calcutta`, `Asia/Saigon`, `Europe/Kiev` or `Asia/Katmandu` are rejected with `400 Unknown timezone`. Send `Asia/Kolkata`, `Asia/Ho_Chi_Minh`, `Europe/Kyiv`, `Asia/Kathmandu`. This matters for JavaScript clients in particular: `Intl.DateTimeFormat().resolvedOptions().timeZone` follows CLDR and still reports the old names on some platforms (Chrome on Windows in India returns `Asia/Calcutta`), so map it before sending.
+:::
+
+### The CSV
+
+| Column | Meaning |
+|---|---|
+| `number` | **Required.** The number to dial, in E.164 (`+919876543210`) |
+| `alternate_number` | Optional fallback, dialed as a retry target once the primary is exhausted |
+| *anything else* | Passed to the agent as a per-row variable, so each call can be personalized |
+
+:::warning Numbers are not validated at create time
+A malformed number is accepted into the campaign and only fails when it is dialed, surfacing as a `skipped` contact. Validate before uploading if you need to catch bad rows early.
+
+Values containing a comma must be quoted (`"Doe, John"`), or the row shifts by a column.
+:::
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/campaigns \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Idempotency-Key: order-4821-campaign" \
+  -F "campaign_name=Q1 Payment Reminders" \
+  -F "agent_uuid=<voice-agent-uuid>" \
+  -F "from_phone_uuid=<phone-uuid>" \
+  -F "csv_file=@contacts.csv" \
+  -F "schedule_enabled=false"
+```
+
+Scheduling it instead, for 9:30 AM IST on 1 March:
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/campaigns \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Idempotency-Key: order-4821-campaign" \
+  -F "campaign_name=Q1 Payment Reminders" \
+  -F "agent_uuid=<voice-agent-uuid>" \
+  -F "from_phone_uuid=<phone-uuid>" \
+  -F "csv_file=@contacts.csv" \
+  -F "schedule_enabled=true" \
+  -F "scheduled_start_local=2026-03-01T09:30" \
+  -F 'schedule_config={"timezone":"Asia/Kolkata","daily_window":{"start_minute":540,"end_minute":1200}}'
+```
+
+`daily_window` is minutes from midnight — `540` is 09:00, `1200` is 20:00. Contacts whose turn comes outside the window are **skipped, not deferred**.
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+  "total_calls_count": 250,
+  "message": "Campaign launched"
+}
+```
+
+---
+
+## List campaigns
+
+`GET /voice/campaigns`
+
+Returns your workspace's campaigns, newest first.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | `25` | 1–200 |
+| `offset` | integer | `0` | For paging |
+| `search` | string | — | Matches the campaign name |
+| `status` | string | — | Filter by lifecycle status |
+
+:::warning Page on `has_more`, never on page length
+Two things can make a page shorter than `limit` while more results exist. If your key is restricted to specific agents, the page is filtered **after** it is fetched, so it can come back short or even empty. Keep requesting while `has_more` is `true`.
+
+Also note an unrecognized `status` value is **ignored rather than rejected**, so a typo returns every campaign instead of none.
+:::
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "campaigns": [
+    {
+      "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+      "campaign_name": "Q1 Payment Reminders",
+      "agent_uuid": "a1d3...",
+      "agent_name": "Collections Agent",
+      "from_phone_uuid": "p7e2...",
+      "from_phone_number": "+14155551234",
+      "status": "running",
+      "total_calls_count": 250,
+      "ended_calls_count": 96,
+      "pickedup_calls_count": 71,
+      "voicemail_calls_count": 12,
+      "failed_trigger_count": 1,
+      "pending_retry_count": 8,
+      "created_at": "2026-02-28T11:02:10Z",
+      "started_at": "2026-03-01T04:00:03Z",
+      "ended_at": null
+    }
+  ],
+  "has_more": true
+}
+```
+
+---
+
+## Get a campaign
+
+`GET /voice/campaigns/{campaign_uuid}`
+
+The campaign's current status, counts, schedule, and per-contact records.
+
+### Response shape
+
+| Field | Description |
+|---|---|
+| `campaign` | The same object the list returns |
+| `call_registry` | Per-contact records — see the warning below |
+| `schedule` | Present only for campaigns created with scheduling on |
+| `dialing_halted` | Present **only** when dialing is unhealthy; absent means healthy |
+| `append_mode` | What [adding contacts](#add-contacts) would do right now: `live`, `between-waves`, or `stage` |
+| `append_pauses_campaign` | Whether adding contacts would pause the campaign first |
+| `append_window_closes_at` | When the between-waves window shuts (ISO-8601 UTC) |
+| `can_launch` | Whether [Launch](#launch) would reopen this campaign |
+| `staged_contacts_count` | How many contacts that launch would dial |
+
+:::info These flags are siblings of `campaign`, not fields inside it
+`append_mode`, `can_launch` and the rest hang off the response root. `campaign` holds the same fields the list endpoint returns.
+:::
+
+:::warning `call_registry` holds one record per ATTEMPT, not per contact
+Once dialing starts, a contact that was retried appears **once per retry**. Group by `contact_index` to get back to one row per contact, and rank within a group by `attempt` to find the latest.
+
+The registry comes back whole — every attempt, unpaged. For a large campaign, or to filter by outcome and join each attempt to its call telemetry, use [List attempts](#list-attempts) instead.
+:::
+
+:::tip Read the flags rather than deriving them from `status`
+A campaign sitting between retry waves still reports `running`, so `status` cannot tell you whether adding contacts would dial immediately, pause the campaign, or only stage them. `append_mode` and `can_launch` are computed server-side for exactly this reason.
+
+One exception: `can_append_contacts` is narrower than "the append endpoint would accept this" — it drives the product's own Add-contacts button and is `false` for a `scheduled` campaign. Don't use it to decide whether to call the endpoint; call it and handle the `409`.
+:::
+
+---
+
+## List attempts
+
+`GET /voice/campaigns/{campaign_uuid}/attempts`
+
+Every dial attempt of the campaign, paged and filterable — one record per **attempt**, from the campaign's own registry. This is the endpoint for a per-contact outcome report, because it includes what the [Call Data API](/agents/voice-agent/api/calls) cannot: contacts that were **never dialed**, and why.
+
+| A contact that… | Appears here as | Appears in `/voice/calls`? |
+|---|---|---|
+| Was answered | `call_status: ended`, `call_discovery: picked` | Yes |
+| Hit voicemail | `call_status: ended`, `call_discovery: voicemail` | Yes |
+| Rang out, was busy, or failed at the carrier | `call_status: ended`, `call_discovery: no-answer` / `busy` / `failed` | Yes, as a `failed` call with no transcript |
+| Was retried | Once **per attempt**, `attempt` 1, 2, 3… | Once per attempt |
+| Had an invalid number, or fell outside the calling window | `call_status: skipped`, with `reason` | **No** — it never became a call |
+| Could not be handed to the carrier | `call_status: trigger_failed`, with `reason` | No |
+| Is still waiting to be dialed | `call_status: pending` | No |
+| Was cancelled with the campaign | `call_status: cancelled` | No |
+
+Each dialed attempt also carries the call's telemetry — timing, end reason, whether there is a recording — joined from the call record while it exists, and its `call_id`, which is what you fetch from the [Call Data API](/agents/voice-agent/api/calls) for the transcript, structured output, or audio.
+
+### Query parameters
+
+All optional. Parameters marked *repeatable* can be given more than once and are ORed.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | `100` | 1–500 |
+| `offset` | integer | `0` | For paging |
+| `contact_index` | integer | — | Only this contact's attempts (its position in the uploaded list, from 0) |
+| `attempt` | integer | — | Only the Nth attempt per contact — `1` is the initial dial, `2` the first retry |
+| `call_discovery` | string, repeatable | — | `picked`, `voicemail`, `no-answer`, `busy`, `failed` |
+| `call_status` | string, repeatable | — | `pending`, `dialing`, `active`, `ended`, `skipped`, `cancelled`, `trigger_failed` |
+
+### Example request
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/campaigns/<campaign-uuid>/attempts?limit=100&offset=0' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+Only the contacts that were never reached, to build a follow-up list:
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice/campaigns/<campaign-uuid>/attempts?call_discovery=no-answer&call_discovery=busy&call_status=skipped' \
+  -H 'api-key: sk_your-generated-secret-here'
+```
+
+### Response — `200 OK`
+
+A dialed attempt, and a contact that was never dialed:
+
+```json
+{
+  "status": "success",
+  "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+  "attempts": [
+    {
+      "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+      "contact_index": 12,
+      "attempt": 1,
+      "number": "+919876543210",
+      "dial_target": "primary",
+      "triggered": true,
+      "call_status": "ended",
+      "call_discovery": "picked",
+      "hangup_cause_code": "4000",
+      "amd_intent": null,
+      "will_retry": false,
+      "next_retry_at": null,
+      "retry_skipped_reason": null,
+      "reason": null,
+      "started_at": "2026-09-16T04:12:09.120000+00:00",
+      "ended_at": "2026-09-16T04:13:01.004000+00:00",
+      "duration_ms": 51884,
+      "ended_reason": "customer-ended-call",
+      "hangup_cause_name": "Normal Hangup",
+      "hangup_source": "Callee",
+      "answered_by": "human",
+      "has_recording": true,
+      "note": null,
+      "note_updated_by": null,
+      "note_updated_at": null
+    },
+    {
+      "call_id": "skipped-13",
+      "contact_index": 13,
+      "attempt": 1,
+      "number": "98765",
+      "dial_target": "primary",
+      "triggered": false,
+      "call_status": "skipped",
+      "call_discovery": "",
+      "hangup_cause_code": null,
+      "amd_intent": null,
+      "will_retry": null,
+      "next_retry_at": null,
+      "retry_skipped_reason": null,
+      "reason": "Invalid phone number",
+      "started_at": null,
+      "ended_at": null,
+      "duration_ms": null,
+      "ended_reason": null,
+      "hangup_cause_name": null,
+      "hangup_source": null,
+      "answered_by": null,
+      "has_recording": false,
+      "note": null,
+      "note_updated_by": null,
+      "note_updated_at": null
+    }
+  ],
+  "total": 250,
+  "has_more": true
+}
+```
+
+`total` counts every record matching the filters, so `total / limit` is the number of pages.
+
+### The attempt object
+
+**From the registry** — permanent:
+
+| Field | Description |
+|---|---|
+| `call_id` | The call to fetch from the [Call Data API](/agents/voice-agent/api/calls). For a row that never became a call it is a placeholder (`pending-…`, `skipped-…`, `cancelled-…`) and `triggered` is `false` — do not look it up |
+| `contact_index` | The contact's position in the uploaded list, from 0. Group on this to get one row per contact |
+| `attempt` | 1-based. `1` is the initial dial, `2` the first retry |
+| `number` | The number this attempt dialed |
+| `dial_target` | `primary` or `alternate` — which of the contact's numbers was used |
+| `triggered` | Whether a dial was actually placed |
+| `call_status` | Where the attempt is in its lifecycle: `pending`, `dialing`, `active`, `ended`, `skipped`, `cancelled`, `trigger_failed` |
+| `call_discovery` | How the dial resolved: `picked`, `voicemail`, `no-answer`, `busy`, `failed`. Empty while still ringing, and on rows that were never dialed |
+| `hangup_cause_code` | The carrier's hangup code |
+| `amd_intent` | What answering-machine detection decided, when it ran |
+| `will_retry` / `next_retry_at` / `retry_skipped_reason` | Retry state: whether another attempt is owed, when, or why one was not scheduled |
+| `reason` | Why a never-dialed row was skipped, cancelled, or failed to trigger |
+| `note` / `note_updated_by` / `note_updated_at` | A team note left on the call in the product |
+
+**Joined from the call record** — `null` when the row never became a call, and again once the call is older than 30 days:
+
+| Field | Description |
+|---|---|
+| `started_at` / `ended_at` / `duration_ms` | UTC timestamps and talk time |
+| `ended_reason` | Why the call ended — the same vocabulary as the [Call Data API](/agents/voice-agent/api/calls#end-reasons) |
+| `hangup_cause_name` / `hangup_source` / `answered_by` | The carrier's disconnect metadata and the AMD result |
+| `has_recording` | Whether the [recording](/agents/voice-agent/api/calls#download-recording) is available |
+
+:::warning Attempts outlive their calls
+The registry half of each record is permanent. The call half — everything from `started_at` down, plus the transcript and recording on the Call Data API — expires **30 days** after the call. An attempt older than that is still listed with its `call_discovery` outcome, but `started_at`, `duration_ms`, and `has_recording` read as `null` / `false`, and its `call_id` is a `404` on `/voice/calls`. Pull the transcripts and recordings you want to keep within the window.
+:::
+
+:::note Counts settle after a campaign stops
+Calls already connected when a campaign is paused or stopped run to their natural end. Their attempts read `dialing` or `active` until then, so `call_discovery` keeps filling in for a few minutes after the status changes.
+:::
+
+---
+
+## Add contacts
+
+`POST /voice/campaigns/{campaign_uuid}/contacts/append`
+
+Adds contacts to a campaign that already exists, without replacing its list. Same agent, same number, same campaign.
+
+### Form fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `csv_file` | file | One of the two | A CSV, same format as create |
+| `contacts` | JSON string | One of the two | An array of contact objects, up to **100** |
+| `call_settings` | JSON string | No | Variable mapping for the new rows |
+
+Both may be sent in one request. They converge on one pipeline, so nothing downstream treats them differently.
+
+### What happens next depends on the campaign
+
+This is the part to get right. **Read `campaign_status` in the response** rather than assuming:
+
+| Mode | When | What happens |
+|---|---|---|
+| `live` | The campaign is dialing its original list | It is **paused, and left paused**. The list cannot change underneath a dialing worker. Nothing resumes it for you — call [`/resume`](#pause--resume) when you have finished adding. |
+| `between-waves` | The primary pass is done and a retry wave is armed but hasn't fired | Nothing is dialing, so the new contacts start immediately. No pause. |
+| `stage` | The campaign is `scheduled`, or finished | The contacts are **only written**. A scheduled campaign dials them when its schedule fires; a finished one dials nothing until [Launch](#launch). |
+
+`GET /{campaign_uuid}` reports which applies as `append_mode`, before you commit to the upload.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/campaigns/<campaign-uuid>/contacts/append \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Idempotency-Key: leads-batch-2026-03-01-07" \
+  -F 'contacts=[
+    {"number": "+919876543210", "name": "Asha"},
+    {"number": "+919876543211", "alternate_number": "+918041234567"}
+  ]'
+```
+
+Or upload a file instead:
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/campaigns/<campaign-uuid>/contacts/append \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Idempotency-Key: leads-batch-2026-03-01-07" \
+  -F "csv_file=@more-contacts.csv"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "campaign_uuid": "0f2c9c1e-7a3d-4f80-9c11-2b6d5a7e91aa",
+  "campaign_status": "paused",
+  "message": "12 contacts added. The campaign has been paused.",
+  "appended": 12,
+  "skipped_duplicates": 3,
+  "skipped_duplicates_in_campaign": 2,
+  "skipped_duplicates_in_file": 1,
+  "invalid": 1,
+  "warnings": []
+}
+```
+
+:::note Duplicates are withheld; invalid numbers are not
+A duplicate — against the campaign, or twice within your own request — is **never added**, and the count is split so you can tell "already in this campaign" from "twice in your file". An invalid number **is** added, matching what create does, and surfaces as `skipped` at dial time.
+:::
+
+:::warning Deduplication is not idempotency
+Re-sending the same contacts mostly lands as duplicates, but only mostly: on the `live` path the retry pauses the campaign again, and on `between-waves` it starts a second run. Send an `Idempotency-Key`.
+:::
+
+---
+
+## Launch
+
+`POST /voice/campaigns/{campaign_uuid}/launch`
+
+Reopens a **finished** campaign and dials the contacts staged on it. This is the deliberate second half of adding contacts to a completed campaign: the upload only writes them, and this is what starts the calls.
+
+Reopening clears the end time and puts the campaign back to `running`, which is a real change to a finished record — hence its own call rather than a flag on the upload.
+
+- Dials **every contact with no outcome yet**, not just the ones most recently added. For a `completed` campaign those are the same set; for a `cancelled` one the whole list is owed, because nothing was ever dialed.
+- A contact that already has an outcome is never re-dialed.
+- Agent, number, retry configuration, and calling window are all inherited. Nothing is editable here.
+- `409` unless the campaign is finished **and** has contacts waiting. Check `can_launch` and `staged_contacts_count` first.
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/campaigns/<campaign-uuid>/launch \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Idempotency-Key: relaunch-4821"
+```
+
+---
+
+## Pause / Resume
+
+`POST /voice/campaigns/{campaign_uuid}/pause`
+`POST /voice/campaigns/{campaign_uuid}/resume`
+
+Pause a `queued` or `running` campaign; resume a `paused` one.
+
+:::note Counts keep moving after a pause
+Calls already connected finish normally, so the numbers carry on settling for a few minutes after the status reads `paused`. Only the un-dialed backlog is held.
+:::
+
+Resuming re-arms any auto-retry wave the pause consumed, so a paused campaign does not lose its pending retries.
+
+---
+
+## Stop
+
+`POST /voice/campaigns/{campaign_uuid}/stop`
+
+Stops a campaign. **Terminal — a stopped campaign cannot be resumed.**
+
+### Body
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `force` | boolean | `false` | Also hang up calls that are currently connected |
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/campaigns/<campaign-uuid>/stop \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{"force": false}'
+```
+
+- **Graceful by default.** No further contacts are dialed, but calls already connected run to their natural end and still record their outcomes.
+- **`force: true` is best-effort.** `disconnected_calls` in the response can be lower than the number that were live; the remainder finish on their own. That is not an error.
+- A `scheduled` campaign has not started — use [Cancel](#cancel) instead.
+
+---
+
+## Cancel
+
+`POST /voice/campaigns/{campaign_uuid}/cancel`
+
+Cancels a `scheduled` campaign before it fires, deleting its schedule. **Terminal.** Once a campaign has launched, [Stop](#stop) is the right action.
+
+---
+
+## Campaign status values
+
+| Status | Meaning |
+|---|---|
+| `scheduled` | Created with a start time; nothing dialed yet |
+| `queued` | Launched, in the brief window before the first contacts flush |
+| `running` | Dialing — **or** sitting between retry waves |
+| `paused` | Held. Resumable. |
+| `completed` | Every contact reached a final outcome |
+| `stopped` | Ended early by a stop. Terminal. |
+| `cancelled` | A scheduled campaign cancelled before it fired. Terminal. |
+| `failed` | The campaign could not be started |
+
+### What each status accepts
+
+| From | pause | resume | stop | cancel | add contacts | launch |
+|---|---|---|---|---|---|---|
+| `scheduled` | — | — | — | ✅ | ✅ (stages) | — |
+| `queued` | ✅ | — | ✅ | — | conditional | — |
+| `running` | ✅ | — | ✅ | — | conditional | — |
+| `paused` | — | ✅ | ✅ | — | conditional | — |
+| `completed` `failed` `stopped` `cancelled` | — | — | — | — | ✅ (stages) | ✅ |
+
+Anything else is a `409` carrying a message written to be shown to a person.
+
+:::note "Conditional" cannot be collapsed into yes or no
+Whether contacts can be added to a `queued` / `running` / `paused` campaign depends on where it is in its retry cycle, not on its status. `GET /{campaign_uuid}` answers it as `append_mode`.
+:::
+
+---
+
+## Errors
+
+| HTTP status | Cause | Fix |
+|---|---|---|
+| `400` | Malformed CSV, bad `schedule_config` JSON, or an invalid start time | Check the format; `scheduled_start_local` must be wall clock with no offset |
+| `400` | Neither `csv_file` nor `contacts` on an append | Send at least one |
+| `400` | Empty or over-long `Idempotency-Key` | Use a non-empty value of at most 255 characters |
+| `401` / `403` | Auth failure on the API key | See the error-code chip in [Request Logs](/agents/developer/request-logs) (`missing_token`, `invalid_token`, `disabled`, `expired`, `scope_denied`, `agent_denied`) |
+| `404` | Campaign not found, or the voice agent is not published | A campaign from another workspace is also a `404`, deliberately |
+| `409` | The action is not valid for the campaign's current status | See the matrix above; the message says what to do instead |
+| `409` | An `Idempotency-Key` was reused for a different request, or its first request is still running | Generate a new key, or retry shortly |
+| `413` | CSV larger than 5 MB | Split the list across campaigns |
+| `503` | The idempotency store is unreachable | Retry, or omit `Idempotency-Key` to proceed without replay protection |
+
+:::note A campaign whose agent was deleted is not reachable through this API
+The key's permissions are checked against the campaign's voice agent, so if that agent has since been deleted the request fails with `403`. The campaign still exists and is still controllable from the **Campaigns** screen. This fails closed on purpose — the alternative is a key reaching a campaign its access list can no longer be evaluated against.
+:::
+
+## Limits
+
+| Limit | Default |
+|---|---|
+| CSV upload size | **5 MB** |
+| Contacts per `contacts` JSON array | **100** — use `csv_file` for longer lists |
+| Campaigns per page | **200** |
+| Attempts per page | **500** (default 100) |
+| Idempotency key length | **255 characters** |
+| Idempotency replay window | **24 hours** |
+
+Concurrent calls are governed by your workspace's voice concurrency allocation, not by this API — a campaign dials as fast as its share of that pool allows.
+
+## What's Next
+
+- [Campaign Quickstart](/agents/voice-agent/campaigns/quickstart) — the same flow through the UI
+- [Campaign Overview](/agents/voice-agent/campaigns/overview) — reading results, recordings, and transcripts
+- [Call Data API](/agents/voice-agent/api/calls) — transcripts, structured output, cost, and recordings for the calls a campaign placed
+- [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) — for one-off transactional calls
+- [Request Logs](/agents/developer/request-logs) — debugging what your integration actually sent

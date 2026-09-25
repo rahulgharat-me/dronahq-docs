@@ -39,7 +39,7 @@ A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fai
 |---|---|---|
 | `api-key` | Yes | Your API key secret (must have **Voice Agent** scope) |
 | `Content-Type` | Yes | `application/json` |
-| `Idempotency-Key` | No | Free-form string. Repeating the same key returns the original `batch_id` instead of creating a new batch. See [Idempotency](#idempotency) below. |
+| `Idempotency-Key` | No | Free-form string. Repeating the same key returns the original `dispatch_id` instead of creating a new batch. See [Idempotency](#idempotency) below. |
 
 ### Body
 
@@ -73,13 +73,13 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
 
 | Field | Type | Description |
 |---|---|---|
-| `batch_id` | string | UUID for this batch; use it with the status endpoint below |
+| `dispatch_id` | string | UUID for this batch; use it with the status endpoint below |
 | `accepted` | integer | Count of numbers accepted into the batch |
 | `status_url` | string | Relative URL to poll for batch status |
 
 ```json
 {
-  "batch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
+  "dispatch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
   "accepted": 2,
   "status_url": "/voice/outbound/dispatch/f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a"
 }
@@ -88,7 +88,7 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
 
 ## Get batch status
 
-`GET /voice/outbound/dispatch/{batch_id}`
+`GET /voice/outbound/dispatch/{dispatch_id}`
 
 Returns the current state of every call in the batch.
 
@@ -102,7 +102,7 @@ Returns the current state of every call in the batch.
 
 ```json
 {
-  "batch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
+  "dispatch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
   "agent_id": "a1d3...",
   "created_at": "2026-06-23T10:14:02Z",
   "total": 2,
@@ -149,7 +149,7 @@ Returns the current state of every call in the batch.
 
 ## Idempotency
 
-Send `Idempotency-Key: <your-string>` on the create request to make retries safe. If you re-send the same `Idempotency-Key`, the API returns the original batch's `batch_id` and `accepted` count instead of dispatching a second time.
+Send `Idempotency-Key: <your-string>` on the create request to make retries safe. If you re-send the same `Idempotency-Key`, the API returns the original batch's `dispatch_id` and `accepted` count instead of dispatching a second time.
 
 Use any stable string your system can regenerate on retry — a campaign-batch ID, a job ID from your scheduler, or a UUID you store before the call.
 
@@ -174,7 +174,7 @@ Defaults are operator-configurable; check with your administrator if you need th
 | `400` | Agent is not published, or has no outbound FROM number | Publish the agent and pick an outbound number in **Call Configuration → Outbound Settings** |
 | `400` | A number isn't valid E.164 | Use `+<country><number>`, digits only |
 | `401` / `403` | Auth failure on the API key | See the error-code chip in [Request Logs](/agents/developer/request-logs) (`missing_token`, `invalid_token`, `disabled`, `expired`, `scope_denied`, `agent_denied`) |
-| `404` | `agent_id` not found, or `batch_id` not found on the status endpoint | Double-check the UUID; the batch may have aged out |
+| `404` | `agent_id` not found, or `dispatch_id` not found on the status endpoint | Double-check the UUID; the batch may have aged out |
 
 ### Per-call error codes
 
