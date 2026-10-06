@@ -3,6 +3,12 @@ sidebar_position: 1
 title: "Outbound Call Dispatch"
 ---
 
+import VideoEmbed from "@site/src/components/VideoEmbed";
+import Image from "@site/src/components/Image";
+import VersionedLink from '@site/src/components/VersionedLink';
+import ArrowRight from '@site/static/icons/arrow_right.svg';
+import Thumbnail from '@site/src/components/Thumbnail'; 
+
 # Outbound Call Dispatch
 
 The Outbound Call Dispatch API queues one or more outbound calls for a published voice agent. Dispatch is **asynchronous**: the API returns `202 Accepted` immediately with a batch identifier, and you poll a status endpoint to track each call as it dials, completes, or fails.
@@ -47,27 +53,142 @@ A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fai
 |---|---|---|---|
 | `agent_id` | string | Yes | UUID of the **published** voice agent to dispatch from |
 | `destination_phonenumber` | string or array of strings | Yes | One or more destination numbers in **E.164 format** (e.g., `+14155551234`). Up to **500** numbers per request by default. |
-| `metadata` | object | No | Free-form key/value pairs attached to the batch — surfaced in observability events for your own correlation |
+| `agent_overrides` | object | No | Per-batch overrides for the agent's saved configuration |
 
-### Example request
+
+
+
+### Agent overrides
+
+Use agent_overrides to change agent behavior for a single dispatch. Any explicitly provided property overrides the existing agent setting. 
+Each key is optional, send only the keys you want to change.
+
+| Key            | Type   | Description                                                           |
+| -------------- | ------ | --------------------------------------------------------------------- |
+| `languages`    | array  | Languages the agent can speak, as language codes (e.g., `en`, `hi`)   |
+| `timezone`     | string | IANA timezone used for the call (e.g., `Asia/Calcutta`)               |
+| `greeting`     | object | First message and speaking behavior                                   |
+| `llm`          | object | Model, provider, system instructions, and generation settings         |
+| `voice`        | object | Voice provider, voice ID, and speech generation settings              |
+| `transcriber`  | object | Speech-to-text model, provider, and transcription settings            |
+
+### Example request with overrides
 
 ```bash
 curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
   -H "api-key: sk_your-generated-secret-here" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: campaign-2026-06-23-batch-7" \
   -d '{
     "agent_id": "<voice-agent-uuid>",
-    "destination_phonenumber": [
-      "+14155551234",
-      "+919876543210"
-    ],
-    "metadata": {
-      "campaign_id": "spring-renewal",
-      "tier": "premium"
+    "destination_phonenumber": ["+91XXXXXXX210"],
+    "agent_overrides": {
+      "languages": ["en"],
+      "timezone": "Asia/Calcutta",
+      "greeting": {
+        "firstMessage": "Hello! I am Parijit from GreatTrips, how may I help you today?",
+        "agentSpeaksFirst": true,
+        "speakingBehaviourType": "custom"
+      },
+      "llm": {
+        "model": "gpt-4o",
+        "provider": "openai",
+        "system_instructions": "<your system prompt>",
+        "promptCache": {
+          "enabled": true
+        },
+        "config": {
+          "temperature": 0.7,
+          "max_tokens": 4000,
+          "recursion_limit": 25
+        }
+      },
+      "voice": {
+        "model": "eleven_turbo_v2_5",
+        "voiceId": "inputyourvoiceid007",
+        "provider": "elevenlabs",
+        "generation_config": {
+          "speed": 1.1,
+          "style": 0.8,
+          "stability": 0.6,
+          "similarity_boost": 0.8,
+          "use_speaker_boost": true,
+          "apply_text_normalization": "auto",
+          "ambiance": {
+            "backgroundSound": "off",
+            "backgroundSoundUrl": null,
+            "backgroundSoundVolume": 0,
+            "backgroundNoisingEnabled": false
+          },
+          "chunkPlan": {
+            "enabled": false,
+            "bufferPlan": {
+              "type": "fixed",
+              "bufferSeconds": 0.1
+            },
+            "minCharacters": 30,
+            "punctuationBoundaries": [".", "!", "?", ",", ";", ":"]
+          },
+          "formatPlan": {
+            "enabled": false,
+            "replacements": [],
+            "numToDigitCutoff": 2
+          }
+        }
+      },
+      "transcriber": {
+        "model": "nova-3",
+        "provider": "deepgram",
+        "generation_config": {
+          "keyterm": [],
+          "numerals": false,
+          "profanityFilter": false,
+          "confidenceThreshold": 0.6,
+          "smartEndpointingEnabled": true,
+          "backgroundDenoisingEnabled": false
+        }
+      }
     }
   }'
 ```
+
+
+
+### `greeting`
+
+| Field                   | Type    | Description                                              |
+| ----------------------- | ------- | -------------------------------------------------------- |
+| `firstMessage`          | string  | What the agent says when the call connects               |
+| `agentSpeaksFirst`      | boolean | If `true`, the agent speaks before the caller            |
+| `speakingBehaviourType` | string  | How the greeting is delivered (e.g., `custom`)           |
+
+### `llm`
+
+| Field                 | Type   | Description                                              |
+| --------------------- | ------ | -------------------------------------------------------- |
+| `model`               | string | Model name (e.g., `gpt-4o`)                              |
+| `provider`            | string | Model provider (e.g., `openai`)                          |
+| `system_instructions` | string | The agent's system prompt                                |
+| `promptCache.enabled` | boolean| Enables prompt caching                                   |
+| `config`              | object | `temperature`, `max_tokens`, and `recursion_limit`       |
+
+### `voice`[​](#voice "Direct link to voice")
+
+| Field               | Type   | Description                                                                  |
+| ------------------- | ------ | ---------------------------------------------------------------------------- |
+| `model`             | string | Text-to-speech model (e.g., `eleven_turbo_v2_5`)                             |
+| `provider`          | string | Voice provider (e.g., `elevenlabs`)                                          |
+| `voiceId`           | string | Voice identifier from the provider                                           |
+| `generation_config` | object | Speech settings: `speed`, `style`, `stability`, `similarity_boost`, `use_speaker_boost`, `apply_text_normalization`, `ambiance`, `chunkPlan`, `formatPlan` |
+
+### `transcriber`[​](#transcriber "Direct link to transcriber")
+
+| Field               | Type   | Description                                                                  |
+| ------------------- | ------ | ---------------------------------------------------------------------------- |
+| `model`             | string | Speech-to-text model (e.g., `nova-3`)                                        |
+| `provider`          | string | Transcription provider (e.g., `deepgram`)                                    |
+| `generation_config` | object | `keyterm`, `numerals`, `profanityFilter`, `confidenceThreshold`, `smartEndpointingEnabled`, `backgroundDenoisingEnabled` |
+
+
 
 ### Response — `202 Accepted`
 
