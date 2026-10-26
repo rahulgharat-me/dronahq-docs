@@ -71,7 +71,7 @@ Each key is optional, send only the keys you want to change.
 | `llm`          | object | Model, provider, system instructions, and generation settings         |
 | `voice`        | object | Voice provider, voice ID, and speech generation settings              |
 | `transcriber`  | object | Speech-to-text model, provider, and transcription settings            |
-
+| `dynamic_variables`  | object | Runtime values for the agent’s variables, as key/value pairs |
 ### Example request with overrides
 
 ```bash
@@ -145,7 +145,10 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
           "confidenceThreshold": 0.6,
           "smartEndpointingEnabled": true,
           "backgroundDenoisingEnabled": false
-        }
+        },
+      "dynamic_variables": {
+        "customer_name": "Aarav",
+        "booking_id_last4": "4821"
       }
     }
   }'
@@ -188,7 +191,18 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
 | `provider`          | string | Transcription provider (e.g., `deepgram`)                                    |
 | `generation_config` | object | `keyterm`, `numerals`, `profanityFilter`, `confidenceThreshold`, `smartEndpointingEnabled`, `backgroundDenoisingEnabled` |
 
+### `dynamic_variables`
 
+`dynamic_variables` passes runtime values into the agent for the calls in this dispatch. Each key is a variable name, and each value is the data the agent uses for that variable.
+
+Reference a variable in the agent’s instructions, greeting, or tool parameters with the standard notation: `{{variable.<name>}}`.
+
+When a key matches a variable already defined in the agent’s Variables section, the value you send overrides the saved value for these calls. See [Variables](/agents/getting-started/variables) for how to define variables.
+
+
+| Field | Type |	Description |
+| ---------- | ---- | ------------- |
+| `<variable_name>`	| object | string	Value for the variable with the same name. One entry per variable. |
 
 ### Response — `202 Accepted`
 
