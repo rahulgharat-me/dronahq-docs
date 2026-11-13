@@ -1,9 +1,9 @@
 ---
 sidebar_position: 2
-title: "DronaHQ MCP"
+title: "Getting Started"
 pagination_prev: null
 ---
-
+import VideoEmbed from "@site/src/components/VideoEmbed";
 import Image from '@site/src/components/Image';
 import VersionedLink from '@site/src/components/VersionedLink';
 import Thumbnail from '@site/src/components/Thumbnail';
@@ -16,14 +16,18 @@ import TabItem from '@theme/TabItem';
 DronaHQ MCP connects the DronaHQ app platform to your AI coding agent like Claude Code, Codex, Cursor, Windsurf, VS Code, or any other MCP-compatible client, over the Model Context Protocol. Instead of your agent only producing frontend code, it gets a production backend it can actually deploy to, authentication, role-based access control (RBAC), a secrets vault, database and API connections, environments, hosting, and audit logging. There's no server to stand up, no CI/CD pipeline to configure, no SSL certificate to manage, and no middleware to write.
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/thumbnail.png" alt="overview" />
-  
+  <VideoEmbed host='youtube' videoId='21eyFKVqlPE' />
 </figure>
 
 
 ## Why use DronaHQ MCP
 
 **The problem it solves:** A coding agent can generate a working admin panel or internal tool in minutes, but shipping it is where the time actually goes : deciding where it runs, who is allowed to access it, where database credentials are stored, how it reaches services behind a VPN, what a rollback looks like, and who signs off on the release. Multiply that by every internal tool your team needs, and it adds up to a significant ongoing cost.
+
+<figure>
+  <Thumbnail src="/img/dronahq-mcp/thumbnail.png" alt="overview" />
+  
+</figure>
 
 ### What you get by prompting through DronaHQ MCP
 

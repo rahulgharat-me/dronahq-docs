@@ -1,5 +1,39 @@
 [
   {
+    "timestamp": 1791182779000,
+    "tags": [
+      "Self-Hosted",
+      "3.10.7-edge"
+    ],
+    "heading": "Version 3.10.7-edge",
+    "cards": [
+      {
+        "title":"Fixed",
+        "type":"fixed",
+        "points":["Fix an issue where dependent JS DQs were not refreshing on dependency changes on Builder",
+ "Fixed an issue with the When to Execute condition in Table Grid additional actions.",
+"Fix an issue where nonce validation was not enforced for the self-hosted user API"
+]
+      }
+    ]
+  },
+
+  {
+    "timestamp": 1789109179000,
+    "tags": [
+      "Self-Hosted",
+      "3.10.6-edge"
+    ],
+    "heading": "Version 3.10.6-edge",
+    "cards": [
+      {
+        "title":"Fixed",
+        "type":"fixed",
+        "points":["Fixed an issue where public Users API not assigning or removing groups by name"]
+      }
+    ]
+  },
+  {
     "timestamp":1788329566000,
     "tags": [
       "Self-Hosted",
