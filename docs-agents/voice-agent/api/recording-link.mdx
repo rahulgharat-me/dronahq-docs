@@ -1,0 +1,104 @@
+---
+sidebar_position: 5
+title: "Recording Link"
+---
+
+# Recording Link
+
+When a call is recorded, the [post-call webhook](/agents/voice-agent/webhook#post-webhook) can carry a `recording_url`: a link that plays the call's recording **without an API key**. This page covers how that link behaves.
+
+:::warning The link is the only credential
+There is no API key and no login on this link. Anyone who has it can play or download the recording until it expires, and it cannot be revoked early. Treat it as a secret: keep it out of logs, analytics, and pages other people can see, and hand it to a browser only for users who may hear that call.
+:::
+
+## When to Use This
+
+- Play a recording in a browser, a CRM, or a review tool without proxying the audio through your own server.
+- Keep a link next to the call in your own system for short-term review.
+
+To keep a recording longer than 15 days, or to avoid a keyless link altogether, fetch the audio with your API key from [Download recording](/agents/voice-agent/api/calls#download-recording) on the Call Data API and store your own copy.
+
+## Where the link comes from
+
+The link is created when the post-call webhook is sent, and only if the agent's post-call webhook includes **Recording URL**. It is the `recording_url` field of the payload (shortened):
+
+```json
+{
+  "event": "post_call",
+  "call_data": { "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47" },
+  "recording_url": "https://<your-dronahq-host>/voice-recordings/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47"
+}
+```
+
+- Use the URL exactly as the webhook sends it; don't build it yourself.
+- The last path segment is the call's `call_id` — the same ID the [Call Data API](/agents/voice-agent/api/calls) uses. Older links end in a different, opaque ID instead and work the same way.
+- `recording_url` is `null` when the call has no recording, or when the link could not be created.
+
+## Lifetime
+
+A link works for **15 days** from when the webhook created it. After that it returns `410`.
+
+After the link expires, use [Download recording](/agents/voice-agent/api/calls#download-recording) with your API key. It works for 30 days from the call's start.
+
+## Request
+
+`GET /voice-recordings/{call_id}`
+
+No headers are required.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `download` | boolean | `false` | `true` adds `Content-Disposition: attachment` so a browser saves the file as `recording-<id>.mp3` |
+
+### Headers
+
+| Header | Direction | Description |
+|---|---|---|
+| `Range` | request | Optional. Standard byte range (`bytes=0-1048575`); the response is `206 Partial Content` with `Content-Range`, so a player can seek and a download can resume |
+| `Accept-Ranges` | response | Always `bytes` |
+| `Content-Length` | response | The size of the body (or of the range) |
+| `Content-Type` | response | `audio/mpeg` |
+
+### Example
+
+```bash
+curl -X GET 'https://<your-dronahq-host>/voice-recordings/<call-id>?download=true' \
+  -o recording-<call-id>.mp3
+```
+
+In a browser:
+
+```html
+<audio controls src="https://<your-dronahq-host>/voice-recordings/<call-id>"></audio>
+```
+
+## Responses
+
+| HTTP status | `detail` | Cause | Fix |
+|---|---|---|---|
+| `200` | — | The recording, as `audio/mpeg` | — |
+| `206` | — | Part of the recording, for a `Range` request | — |
+| `404` | `recording not found` | No link exists for this ID | Use the URL from the webhook |
+| `404` | `recording not yet available` | The link is valid but the file has not reached storage yet — normal in the first minute or two after a call ends | Retry shortly. If it persists, check `has_recording` on [Get a call](/agents/voice-agent/api/calls#get-a-call): `false` means the file was never stored |
+| `410` | `recording link has expired` | More than 15 days since the link was created | Use [Download recording](/agents/voice-agent/api/calls#download-recording) |
+| `416` | `range not satisfiable` | The `Range` header asks for bytes past the end of the recording | Check `Content-Length` |
+| `502` | `upstream storage error` | The recording store failed | Retry |
+| `503` | `storage not configured` | Recording storage is not configured on this server | Contact support |
+
+Errors are JSON, with the message as a string in `detail`: `{"detail": "recording link has expired"}`.
+
+## Recording link or Download recording?
+
+| | Recording link | [Download recording](/agents/voice-agent/api/calls#download-recording) |
+|---|---|---|
+| Authentication | None — the link is the credential | `api-key` header |
+| Where you get it | The post-call webhook's `recording_url` | Build it from a `call_id` |
+| Works for | 15 days from the webhook | 30 days from the call's start |
+| From a browser | Yes | No — server-to-server only |
+
+## What's Next
+
+- [Call Data API — Download recording](/agents/voice-agent/api/calls#download-recording) — the same audio, with an API key
+- [Post-call Webhook](/agents/voice-agent/webhook) — where `recording_url` is configured and sent

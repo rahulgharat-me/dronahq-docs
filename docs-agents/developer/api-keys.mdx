@@ -9,7 +9,7 @@ import Thumbnail from '@site/src/components/Thumbnail';
 
 API Keys are workspace-level secrets that let external clients call DronaHQ APIs on behalf of your agents. Each key is a `sk_` prefixed token that you scope to one or more agent types and (optionally) to a specific list of agents.
 
-A single key can address **Agent**, **Data Agent**, and **Voice Agent** in any combination — pick the minimum set of scopes the integration actually needs.
+A single key can address **Agent**, **Data Agent**, and **Voice Agent** in any combination, and the **Agent Creator** scope lets it build voice agents — pick the minimum set of scopes the integration actually needs.
 
 
 ## Overview
@@ -37,14 +37,18 @@ When you generate a key:
 - **Required field**.
 
 #### Scopes
-- One or more of **Agent**, **Data Agent**, **Voice Agent**.
+- One or more of **Agent**, **Data Agent**, **Voice Agent**, **Agent Creator**.
 - Scopes are additive — a key with both **Agent** and **Voice Agent** can call both.
+- **Voice Agent** places and reads calls: [Outbound Call Dispatch](/agents/voice-agent/api/dispatch), [Campaigns](/agents/voice-agent/api/campaigns) and the [Call Data API](/agents/voice-agent/api/calls).
+- **Agent Creator** creates, reads, updates and deletes voice agents with the [Voice Agents API](/agents/voice-agent/api/voice-agents). It grants nothing on calls, dispatch or campaigns, and **Voice Agent** grants nothing on the Voice Agents API. A key that builds agents and also calls them needs both.
 - Pick the minimum set required by the integration. If the key leaks, a tighter scope limits the blast radius.
 - **Required field**.
 
 #### Agent Access
 - **All Agents** (default) — the key can target every agent under the selected scopes.
-- Or pick a specific subset of agents. The key will be denied access to anything outside that list.
+- Or pick a specific subset of agents. The key will be denied access to anything outside that list. The list must name at least one agent, and it applies to every scope on the key.
+- An agent created with an **Agent Creator** key is added to that key's list, so the key can keep managing what it builds. If the key also has **Voice Agent**, it can place calls with the new agent too.
+- Deleting a voice agent removes it from every key's list. A key whose list ends up empty can't reach any agent, so it is **disabled**. To use it again, **Edit** its Agent Access, then turn **Enabled** back on.
 
 #### Expires
 - **Never** / **30 days** / **90 days** / **1 year** / **Custom date**.
@@ -91,6 +95,18 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
 If the request goes through a reverse proxy, the backend honors `x-forwarded-for` so the original caller IP appears in [Request Logs](/agents/developer/request-logs).
 
 
+## Auth errors
+
+Every API that takes a key answers an auth failure the same way:
+
+| HTTP status | Meaning |
+|---|---|
+| `401` | The key is missing, unknown, disabled or expired |
+| `403` | The key is valid, but it lacks the scope the API needs, or the agent isn't on its **Agent Access** list |
+
+`detail` is a message string, such as `"This API key is disabled."`. A request whose key is missing or unknown can't be tied to your workspace, so it doesn't appear in [Request Logs](/agents/developer/request-logs).
+
+
 ## Managing keys
 
 The **API Keys** list shows the following columns:
@@ -102,8 +118,10 @@ The **API Keys** list shows the following columns:
 | **Scopes** | The agent types this key can address |
 | **Agent Access** | **All Agents**, or the count of allowlisted agents |
 | **Expires** | Expiry date, or **Never** |
-| **Last Used** | Timestamp of the most recent successful auth |
+| **Last Used** | Timestamp of the most recent successful auth (see below) |
 | **Enabled** | Toggle — controls whether the key authenticates |
+
+**Last Used** moves on every request where the key is valid and has the scope the API needs, even if the request then fails, for example with a `403` because the agent isn't on its **Agent Access** list, or with a `422`. It doesn't move on a `401`, or when the key lacks the scope the API needs.
 
 Available operations:
 

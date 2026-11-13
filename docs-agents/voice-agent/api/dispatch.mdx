@@ -5,7 +5,7 @@ title: "Outbound Call Dispatch"
 
 # Outbound Call Dispatch
 
-The Outbound Call Dispatch API queues one or more outbound calls for a published voice agent. Dispatch is **asynchronous**: the API returns `202 Accepted` immediately with a batch identifier, and you poll a status endpoint to track each call as it dials, completes, or fails.
+The Outbound Call Dispatch API queues one or more outbound calls from a voice agent — its published version, or its draft. Dispatch is **asynchronous**: the API returns `202 Accepted` immediately with a batch identifier, and you poll a status endpoint to track each call as it dials, then ends answered, unanswered, or failed.
 
 ## When to Use This
 
@@ -15,7 +15,8 @@ The Outbound Call Dispatch API queues one or more outbound calls for a published
 
 ## Prerequisites
 
-- A **published** voice agent with an active outbound **FROM number** configured under **Call Configuration → Outbound Settings**. Drafts and unpublished agents cannot be dispatched.
+- A voice agent. Calls run its **published** version; to call with unpublished changes, send `"agent_version": "draft"` — see [Calling with the draft](#calling-with-the-draft).
+- A number to call from: the outbound **FROM number** of the version you call (**Call Configuration → Outbound Settings**), or any active number in your workspace, sent as `source_phone_number`.
 - An [API Key](/agents/developer/api-keys) with the **Voice Agent** scope. If the key uses a specific **Agent Access** list, the target `agent_id` must be on that list.
 
 ## Authentication
@@ -26,7 +27,7 @@ Every request must include the **`api-key`** header — see [API Keys](/agents/d
 api-key: sk_<your-secret>
 ```
 
-A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fails with `401`/`403` and is recorded in [Request Logs](/agents/developer/request-logs) with a matching error code.
+A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fails with `401`/`403`. Requests made with one of your keys, refused ones included, are recorded in [Request Logs](/agents/developer/request-logs) with a matching error code. A request with no key or an unknown key can't be tied to your workspace, so it isn't.
 
 
 ## Create a dispatch
@@ -39,15 +40,20 @@ A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fai
 |---|---|---|
 | `api-key` | Yes | Your API key secret (must have **Voice Agent** scope) |
 | `Content-Type` | Yes | `application/json` |
-| `Idempotency-Key` | No | Free-form string. Repeating the same key returns the original `dispatch_id` instead of creating a new batch. See [Idempotency](#idempotency) below. |
+| `Idempotency-Key` | No | Any string up to 255 characters. Re-sending a key returns the original batch instead of creating a new one — see [Idempotency](#idempotency). |
 
 ### Body
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `agent_id` | string | Yes | UUID of the **published** voice agent to dispatch from |
-| `destination_phonenumber` | string or array of strings | Yes | One or more destination numbers in **E.164 format** (e.g., `+14155551234`). Up to **500** numbers per request by default. |
-| `metadata` | object | No | Free-form key/value pairs attached to the batch — surfaced in observability events for your own correlation |
+| `agent_id` | string | Yes | UUID of the voice agent to dispatch from. It must be **published**, unless `agent_version` is `draft` |
+| `destination_phonenumber` | string or array of strings | Yes | One or more destination numbers in **E.164 format** (e.g., `+14155551234`): `+`, country code, number. Spaces, dashes and brackets are allowed; numbers come back in plain E.164. Up to **500** numbers per request by default. A number repeated in the request is dialed **once** — see [Duplicate numbers](#duplicate-numbers). |
+| `source_phone_number` | string | No | The number to dial **from**, in E.164. Any active phone number in your workspace — it does not have to be one this agent is configured with. Omit it to use the outbound FROM number of the version the calls run (published, or the draft's). |
+| `agent_version` | string | No | `published` (default) or `draft`. `draft` runs the agent's current unpublished configuration — see [Calling with the draft](#calling-with-the-draft) |
+| `agent_overrides` | object | No | Per-call changes to the agent's configuration, for these calls only — see [Agent overrides](#agent-overrides) |
+| `metadata` | object | No | Free-form key/value pairs for your own correlation, echoed back in webhooks. Up to **8 KB** as JSON. Keys the platform uses for its own routing (`batch_id`, `dispatch_index`, `dispatch_attempt`, `dynamic_variables`, `campaign_uuid`, `campaign_row_index`, `campaign_fields`, `is_alternate_number`) are dropped. |
+
+Any other top-level field is **ignored, not rejected**, and named in the response's `ignored_fields` — check it to catch a misspelt field name.
 
 ### Example request
 
@@ -69,18 +75,67 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
   }'
 ```
 
+### Agent overrides
+
+`agent_overrides` changes the agent for the calls in this request only; the published agent is untouched. Send blocks in the same shape the agent's published snapshot uses — every key is optional, and anything you leave out keeps its published value.
+
+| Key | What it changes |
+|---|---|
+| `llm` | Model, provider, prompt and generation settings |
+| `voice` | The text-to-speech voice and its settings |
+| `transcriber` | Speech-to-text provider, model and settings |
+| `greeting` | The first message and how the call opens (`firstMessage`, `agentSpeaksFirst`, `speakingBehaviourType`, silence and welcome-delay settings). A `firstMessage` is spoken as written even when the agent's greeting is set to **Dynamic message**; send `"speakingBehaviourType": "dynamic"` with it to keep the generated greeting |
+| `firstMessage` | Shorthand for `greeting.firstMessage` |
+| `languages` | The languages the agent recognises and speaks (legacy `language` is also accepted) |
+| `timezone` | The agent's timezone |
+| `speech_recovery` | How the agent recovers from unclear or missed speech |
+| `conversation_settings` | Call-level conversation limits, such as the total call timeout |
+| `runtime_behaviour` | Conversation behaviour — interruption handling, backchanneling, conversation memory |
+| `dynamic_variables` | Values for the agent's `{{variable.name}}` placeholders. Names the agent doesn't define are dropped and listed in the response's `ignored_variables`, not in `ignored_overrides` |
+
+**Anything else is ignored, not rejected** — including `tools`, `knowledge_base`, `memory`, `privacy`, `webhook_settings`, `structured_outputs_json`, and the rest of `call` (phone numbers, transfer targets, data sources). Those belong to the agent and change only by publishing it. A listed key with the wrong type is ignored too: `firstMessage` and `timezone` take a plain value, `languages` a list, and every other key an object. The response names each ignored key in `ignored_overrides`, spelt as you sent it.
+
+If an override switches the `llm`, `voice`, or `transcriber` provider, a usable key for that provider must be configured in your workspace and the model must exist for that provider — otherwise the request fails with `400` before anything is queued.
+
+### Calling with the draft
+
+Send `"agent_version": "draft"` to test changes before you publish them. The calls run the agent's current draft — configuration, skills and variables — exactly as **Test call** in the agent builder does, and the agent doesn't need to have been published.
+
+- `agent_overrides` apply on top of the draft, and `dynamic_variables` are checked against the draft's variables.
+- Without `source_phone_number`, the calls dial from the draft's outbound FROM number. If the draft sets none, they dial from the one active phone number linked to the agent. If there is no such number, or there are several, the request fails with `400` before anything is queued.
+- Draft calls, answered or not, are billed and recorded like any other call. They show `agent_draft: true` in the [Call Data API](./calls.mdx), and their post-call webhook goes to the draft's webhook settings, with `agent.draft: true`.
+
+### Duplicate numbers
+
+Each number is dialed **once per request**. Repeats — including the same number written differently (`+1 415 555 1234` and `+14155551234`) — are dropped, the first occurrence is kept, and the order of the rest is preserved. The response reports how many were dropped in `duplicates_removed`.
+
+Calls are numbered after duplicates are removed: a call's `index` in the status response, and `dispatch_index` in webhooks, is its position in the de-duplicated list, not in your request. Sending `[A, B, A, C]` gives `A = 0`, `B = 1`, `C = 2`. The `202`'s `calls` lists each number with its `index`, so you can match them to your own records straight away. You can also send your own ID in `metadata`.
+
 ### Response — `202 Accepted`
 
 | Field | Type | Description |
 |---|---|---|
 | `dispatch_id` | string | UUID for this batch; use it with the status endpoint below |
-| `accepted` | integer | Count of numbers accepted into the batch |
+| `accepted` | integer | Count of numbers accepted into the batch, after duplicates are removed |
+| `duplicates_removed` | integer | Repeated numbers dropped from the request |
+| `ignored_overrides` | array of strings | `agent_overrides` keys that were ignored, spelt as you sent them — see [Agent overrides](#agent-overrides). Empty when none were |
+| `ignored_fields` | array of strings | Top-level request fields dispatch doesn't take, ignored rather than rejected. Empty when every field was recognised |
+| `ignored_variables` | array of strings | `agent_overrides.dynamic_variables` names the agent doesn't define, dropped. Empty when every name was known, and always empty on an [idempotent replay](#idempotency) |
+| `calls` | array of objects | Each accepted number as `{index, phone_number}`, in the order they dial. `index` is the call's position in the status response — see [Duplicate numbers](#duplicate-numbers) |
 | `status_url` | string | Relative URL to poll for batch status |
 
 ```json
 {
   "dispatch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
   "accepted": 2,
+  "duplicates_removed": 0,
+  "ignored_overrides": [],
+  "ignored_fields": [],
+  "ignored_variables": [],
+  "calls": [
+    { "index": 0, "phone_number": "+14155551234" },
+    { "index": 1, "phone_number": "+919876543210" }
+  ],
   "status_url": "/voice/outbound/dispatch/f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a"
 }
 ```
@@ -104,23 +159,29 @@ Returns the current state of every call in the batch.
 {
   "dispatch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
   "agent_id": "a1d3...",
-  "created_at": "2026-06-23T10:14:02Z",
+  "created_at": "2026-06-23T10:14:02.418312+00:00",
   "total": 2,
   "queued": 0,
   "dialing": 1,
   "completed": 1,
+  "answered": 1,
+  "unanswered": 0,
   "failed": 0,
   "retrying": 0,
+  "cancelled": 0,
+  "finished": false,
   "calls": [
     {
       "index": 0,
       "phone_number": "+14155551234",
-      "status": "completed",
+      "status": "answered",
       "attempts": 1,
       "error_code": null,
       "error_message": null,
-      "started_at": "2026-06-23T10:14:05Z",
-      "completed_at": "2026-06-23T10:15:22Z"
+      "started_at": "2026-06-23T10:14:05.102947+00:00",
+      "completed_at": "2026-06-23T10:15:22.880113+00:00",
+      "call_id": "3f9a1c7e2b8d4f6a9e0b1c2d3e4f5a6b",
+      "updated_at": "2026-06-23T10:15:22.894507+00:00"
     },
     {
       "index": 1,
@@ -129,52 +190,173 @@ Returns the current state of every call in the batch.
       "attempts": 1,
       "error_code": null,
       "error_message": null,
-      "started_at": "2026-06-23T10:14:05Z",
-      "completed_at": null
+      "started_at": "2026-06-23T10:14:05.231806+00:00",
+      "completed_at": null,
+      "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+      "updated_at": "2026-06-23T10:14:05.240118+00:00"
     }
   ]
 }
 ```
 
+Timestamps are UTC, in ISO 8601 with a `+00:00` offset and usually microseconds.
+
+### Call fields
+
+| Field | Description |
+|---|---|
+| `index` | The call's position in the batch, after duplicates are removed — see [Duplicate numbers](#duplicate-numbers) |
+| `phone_number` | The number dialed, in E.164 |
+| `status` | See [Call status values](#call-status-values) |
+| `attempts` | Dial attempts so far, including retries |
+| `error_code`, `error_message` | Why the call failed, or why its last attempt failed when it is being retried — see [Per-call error codes](#per-call-error-codes) |
+| `started_at` | When the latest attempt started dialing |
+| `completed_at` | When the call ended, failed or was cancelled |
+| `call_id` | The latest attempt's call ID; `null` until the call first dials. Each attempt gets a new one. Use it with [live call control](./live-control.mdx) while the call is on, and with the [Call Data API](./calls.mdx) once its record is written — see the note below |
+| `updated_at` | When this call's entry last changed. Poll and skip the calls whose `updated_at` you have already seen |
+
+:::note When the Call Data API has the call
+A call's record is written when the agent finishes with it, a few minutes after hang-up. Until then the Call Data API answers `404` for its `call_id`. An agent with **Zero Data Retention** or call logging turned off keeps no record of an answered call, so its `call_id` stays a `404` there.
+:::
+
+While a dispatched call is live, live call control's `GET` also shows which API key placed it: `"created_by": {"kind": "api_key", "id": "<key id>"}`.
+
 ### Call status values
 
 | Status | Meaning |
 |---|---|
-| `queued` | Waiting in the dispatcher queue, not yet dialed |
-| `dialing` | Provider has been asked to place the call |
-| `completed` | Call connected and ended normally |
-| `failed` | Call failed permanently; `error_code` and `error_message` describe why |
-| `retrying` | Call failed with a retriable error and will be retried (subject to the retry budget) |
+| `queued` | Waiting for a free concurrency slot; not dialed yet — see [Limits](#limits) |
+| `dialing` | The call is being placed, ringing, or in conversation — it hasn't ended |
+| `answered` | A person picked up, and the call has ended |
+| `unanswered` | The call ended without a person picking up — no answer, busy, voicemail, or a carrier failure after dialing |
+| `failed` | The call couldn't be placed, never got a free concurrency slot, or no end-of-call signal arrived; `error_code` and `error_message` describe why |
+| `retrying` | The call failed before it was placed and will be retried (subject to the retry budget) |
+| `cancelled` | Stopped with [Cancel calls](#cancel-calls) before it dialed. A call cancelled while `queued` has no `call_id`, no call log and no webhook. One cancelled while `retrying` keeps the `call_id` of its last failed attempt |
+
+Voicemail counts as `unanswered`: a machine picked up, not a person. For the detailed outcome, transcript and recording of a call, use its `call_id` with the [Call Data API](/agents/voice-agent/api/calls), once its record is written — see [When the Call Data API has the call](#call-fields).
+
+The batch-level `completed` count is every call that has ended, whether answered or unanswered (`answered + unanswered`). A batch is finished when `completed + failed + cancelled` equals `total`; `finished` is then `true`.
+
+:::note `completed` before this change
+Calls that ended before the answered / unanswered split still have the status `completed` until the batch ages out of retention. They are included in the `completed` count, but not in `answered` or `unanswered`.
+:::
+
+
+## Cancel calls
+
+`POST /voice/outbound/dispatch/{dispatch_id}/cancel`
+
+Stops calls that haven't dialed yet — `queued` (waiting for a free slot) or `retrying` (waiting for their next attempt). They move to `cancelled` straight away and are never dialed.
+
+A call that is already `dialing` is **not** stopped here. End it with `end_call` through [live call control](./live-control.mdx) (`POST /voice/control/{call_id}`), using the `call_id` from the status response. Live call control takes **no API key**: the `call_id` is the credential, so keep it private.
+
+### Body
+
+Optional. Send no body, `{}`, or `{"indexes": null}` to cancel every call in the batch that hasn't dialed.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `indexes` | array of integers | No | Only these calls, by their `index` in the status response. At least one |
+
+Unlike create, an unknown field is **rejected** (`422`): leaving `indexes` out cancels everything, so a misspelt `index` must not be read as "all".
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch/f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a/cancel \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{"indexes": [1, 2]}'
+```
+
+### Response — `200 OK`
+
+Every call you asked about, with what happened to it. `cancelled` counts the calls this request cancelled.
+
+```json
+{
+  "dispatch_id": "f0c1a3f2-9e1c-4b21-9b8b-5a9c0f0a1e3a",
+  "cancelled": 1,
+  "calls": [
+    {
+      "index": 1,
+      "phone_number": "+919876543210",
+      "status": "dialing",
+      "cancelled": false,
+      "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+      "detail": "Already dialing. End it with live call control: POST /voice/control/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47 with {\"type\": \"end_call\", \"command_id\": \"<your unique id: 8-64 letters, digits, - or _>\"}."
+    },
+    {
+      "index": 2,
+      "phone_number": "+14155550199",
+      "status": "cancelled",
+      "cancelled": true,
+      "call_id": null,
+      "detail": null
+    }
+  ]
+}
+```
+
+- **`call_id` is the one the status response shows.** `null` for a call cancelled while `queued`; the last failed attempt's for one cancelled while `retrying`.
+- **Cancelling twice is not an error.** A call cancelled earlier comes back with `cancelled: true` and `detail: "Already cancelled."`, and isn't counted again.
+- **Nothing cancellable → `409`.** If none of the calls could be cancelled — they had all dialed or ended — the response is `409`, with `detail.error: "nothing_to_cancel"`, a `detail.message`, and the same per-call list in `detail.calls`.
+- **A cancel and a dial can't both win.** If a call starts dialing at the moment you cancel it, exactly one of the two happens, and the response tells you which.
+- A cancelled call that was waiting for a slot gives the slot up without dialing.
 
 
 ## Idempotency
 
-Send `Idempotency-Key: <your-string>` on the create request to make retries safe. If you re-send the same `Idempotency-Key`, the API returns the original batch's `dispatch_id` and `accepted` count instead of dispatching a second time.
+Send `Idempotency-Key: <your-string>` on the create request to make retries safe. Use any stable string up to 255 characters that your system can regenerate on retry — a campaign-batch ID, a job ID from your scheduler, or a UUID you store before the call. Keys are per workspace and remembered for **24 hours** by default.
 
-Use any stable string your system can regenerate on retry — a campaign-batch ID, a job ID from your scheduler, or a UUID you store before the call.
+| You re-send the key… | Response |
+|---|---|
+| With the same body, after the original was accepted | `202` with the original `dispatch_id`, `accepted` count and `calls`, plus the header `Idempotent-Replayed: true`. `ignored_variables` is empty on a replay: it is only checked when the batch is created. Nothing new is dialed |
+| With the same body, while the original is still being accepted | `409` with `Retry-After: 5`. Retry after that, and you get the replay |
+| After the original request failed | Processed as a new request |
+| With a different body | `422` with `detail.error: "idempotency_key_reused"`. Nothing is dialed |
+
+Fields dispatch ignores, and the formatting of the numbers, don't make a body different.
 
 ## Limits
 
 | Limit | Default | Notes |
 |---|---|---|
-| Numbers per request | **500** | Requests exceeding this fail with `400`. |
-| Concurrent calls per worker | **2** | Beyond this, calls stay in `queued` until a slot frees. |
-| Retry attempts per call | **3** | Only applies to retriable failures (see below). |
+| Numbers per request | **500** | Counted after duplicates are removed. Requests exceeding this fail with `400`. |
+| `metadata` size | **8 KB** | As JSON. Larger requests fail with `422`. |
+| Concurrent calls | **3** per workspace | Shared with outbound test calls placed from the app. A call holds its slot until it ends; beyond this, calls stay `queued`. |
+| Wait for a free slot | **5 minutes** | Per call, from when the batch is accepted (or from its retry). A call still waiting then fails with `QUEUE_QUEUE_TIMEOUT`. |
+| Calls waiting for a slot | **500** per workspace | Beyond this, a call fails at once with `QUEUE_QUEUE_FULL`. |
+| Attempts per call | **3** | In total, so up to 2 retries, a few seconds apart. Only for retriable failures (see below). |
 
-Defaults are operator-configurable; check with your administrator if you need them tuned.
+Every call in a batch starts waiting for a slot as soon as the batch is accepted. If your workspace can't dial the whole batch within the wait, the calls left over fail with `QUEUE_QUEUE_TIMEOUT` — send smaller batches, or raise the limits.
+
+Concurrent calls (the **Public API** share), queue size and queue timeout are workspace settings under **Concurrency Management**. The other defaults are operator-configurable; check with your administrator if you need them tuned.
 
 
 ## Errors
 
 ### API errors (entire request fails)
 
+Every error body is `{"detail": ...}`. `detail` is a string, except:
+
+- `idempotency_key_reused` (`422`) and `nothing_to_cancel` (`409`): an object with `error` and `message` — plus `calls` for the cancel.
+- Other `422`s: an array with one entry per problem, each naming the field (`loc`) and the reason (`msg`).
+
 | HTTP status | Cause | Fix |
 |---|---|---|
 | `400` | Too many numbers in one request | Split into batches of ≤ 500 |
-| `400` | Agent is not published, or has no outbound FROM number | Publish the agent and pick an outbound number in **Call Configuration → Outbound Settings** |
-| `400` | A number isn't valid E.164 | Use `+<country><number>`, digits only |
-| `401` / `403` | Auth failure on the API key | See the error-code chip in [Request Logs](/agents/developer/request-logs) (`missing_token`, `invalid_token`, `disabled`, `expired`, `scope_denied`, `agent_denied`) |
-| `404` | `agent_id` not found, or `dispatch_id` not found on the status endpoint | Double-check the UUID; the batch may have aged out |
+| `400` | `Invalid agent or given agent is not published` — the agent exists but isn't published | Publish the agent, or send `"agent_version": "draft"` |
+| `400` | No `source_phone_number` sent and the agent has no active outbound FROM number | Pick an outbound number in **Call Configuration → Outbound Settings**, or send `source_phone_number` |
+| `400` | `Agent is not ready to dispatch draft calls: …` | A draft call with no `source_phone_number`, and the draft has no usable outbound FROM number. The message says why. Set one in the draft's **Call Configuration**, or send `source_phone_number` |
+| `400` | `source_phone_number` is not a phone number in your workspace, or is inactive | Add or reactivate it under **Phone Numbers** |
+| `400` | An override switches to a provider with no usable key, or a model that provider doesn't offer | Configure the provider key, or fix the model |
+| `400` | Cancel named an `index` the batch doesn't have | Use the indexes from the status response |
+| `401` / `403` | Auth failure on the API key | A missing or unknown key is a `401` and isn't logged. Otherwise see the error-code chip in [Request Logs](/agents/developer/request-logs) (`disabled`, `expired`, `scope_denied`, `agent_denied`). An `agent_id` that doesn't exist in your workspace, or a `dispatch_id` from another workspace, is also `403 agent_denied` |
+| `404` | No batch with this `dispatch_id`, on the status or cancel endpoint | Double-check the UUID. Batches are kept for 30 days |
+| `409` | A request with this `Idempotency-Key` is still being accepted | Retry after `Retry-After` seconds — see [Idempotency](#idempotency) |
+| `409` | Cancel found nothing to cancel — every call had dialed or ended | End a live call with `end_call` through [live call control](./live-control.mdx) |
+| `422` | A number that isn't valid E.164, an empty number list, `metadata` larger than 8 KB, an `agent_version` other than `published` or `draft`, or an `Idempotency-Key` longer than 255 characters | Fix the field named in `detail` |
+| `422` | `idempotency_key_reused` — this `Idempotency-Key` was already used with a different body | Use a new key for a new request |
+| `422` | Cancel body has an unknown field, or an empty / non-list `indexes` | Send `{"indexes": [..]}`, or no body to cancel all |
 
 ### Per-call error codes
 
@@ -183,13 +365,17 @@ When a single call inside a batch fails, the call's `error_code` is one of:
 | Code | Retriable? | Meaning |
 |---|---|---|
 | `INVALID_NUMBER` | No | Number was rejected by the carrier as malformed or unreachable |
-| `PROVIDER_REJECTED` | No | Telephony provider refused to place the call (geo block, balance, etc.) |
-| `PROVIDER_UNAVAILABLE` | Yes | Provider was temporarily unreachable |
-| `NO_ANSWER` | No | Call rang out without being picked up |
-| `BUSY` | Yes | Recipient line was busy |
-| `AGENT_FAILED_TO_JOIN` | Yes | The voice agent didn't join the room in time |
-| `LIVEKIT_ERROR` | Yes | Underlying LiveKit session failed |
-| `TIMEOUT` | Yes | Operation exceeded its time budget |
-| `INTERNAL_ERROR` | Yes | Unexpected failure inside DronaHQ |
+| `PROVIDER_REJECTED` | No | Telephony provider refused to place the call (geo block, balance, etc.), or the agent was unpublished after the request was accepted |
+| `PROVIDER_UNAVAILABLE` | Yes | Provider was temporarily unavailable and refused the request (HTTP 429 or 503) |
+| `PROVIDER_ERROR` | No | Provider returned a server error (HTTP 500, 502 or 504). The call may already have been placed |
+| `LIVEKIT_ERROR` | Yes | The voice session could not be prepared, before anything was dialed |
+| `TIMEOUT` | No | Placing the call took longer than 2 minutes |
+| `INTERNAL_ERROR` | No | Unexpected failure inside DronaHQ |
+| `TIMEOUT_NO_TERMINAL` | No | The call was placed, but no end-of-call signal arrived. A live call is never marked this: from 5 minutes after it was placed, it is checked every 30 seconds and keeps its concurrency slot while it is live. It is marked only once it has ended with no signal, or after 4 h 10 min |
+| `QUEUE_QUEUE_TIMEOUT` | No | No concurrency slot freed up within the wait (5 minutes by default). Never dialed |
+| `QUEUE_QUEUE_FULL` | No | Too many calls were already waiting for a slot in your workspace (500 by default). Never dialed |
+| `QUEUE_FAIL_CLOSED` | No | Concurrency couldn't be checked, and this deployment refuses calls when that happens. Never dialed |
 
-Retriable codes are attempted again automatically up to the retry budget; non-retriable codes terminate the call as `failed` immediately.
+Only failures that happen **before** the carrier places the call are retried. `TIMEOUT`, `INTERNAL_ERROR` and `PROVIDER_ERROR` can happen after the call has already gone out, and retrying them could ring the same person twice, so they end the call as `failed` instead. The `QUEUE_` codes aren't retried either, but those calls never dialed: dispatch the number again once capacity frees up.
+
+A call that rings out, is busy, or reaches voicemail is not an error: it ends as `unanswered`.
