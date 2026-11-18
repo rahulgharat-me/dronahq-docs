@@ -45,9 +45,11 @@ module.exports.default =  function CounterWidget() {
 ```
 ---
 
-### CrayonAI UI Components
+### UI Components
 
-CrayonAI UI components are available through the `UI` plugin.
+The UI components are available through the global UI object. Use these components to build structured and interactive interfaces inside your widgets.
+
+
 
 These components can be used to build structured and interactive UI inside your widget.
 
@@ -78,10 +80,6 @@ Example input data:
   ]
 }
 ```
-
-For the full list of available components, refer to the CrayonAI UI documentation:
-
-[https://crayonai.org/ui/?path=/docs/components-bottomtray--docs](https://crayonai.org/ui/?path=/docs/components-bottomtray--docs)
 
 ---
 
@@ -138,11 +136,76 @@ Example input:
 
 ---
 
+## UI Components Migration Guide
+
+Applications and widgets created before November 19, 2026, should consider the following changes when using the updated UI Components.
+
+The updates introduce improvements to component behavior and defaults. Some existing implementations may require minor adjustments.
+
+Refer to the migration instructions below to identify the affected components and update them accordingly.
+
+The following table summarizes the behavior changes and recommended migration steps.
+
+| Component / Area | `@crayonai/react-ui` (Old) | `@openuidev/react-ui` (New) | Migration Action |
+| --- | --- | --- | --- |
+| `LineChart` / `BarChart` / `AreaChart` | Charts could scroll horizontally. | Charts are condensed to fit the container width, similar to the old `*Condensed` variants. | No change is needed for most widgets. For long data series, use `ScrollableLineChart`, `ScrollableBarChart`, or `ScrollableAreaChart`. The supported `tickVariant` values are now `"singleLine"` and `"angled"`. |
+| `ListItem` | Used the `decorativeIcon` prop. | Uses the `icon` prop, displayed when `ListBlock` has `variant="icon"`. | Rename `decorativeIcon` to `icon` and set the parent `ListBlock` variant to `"icon"`. |
+| `Callout` | Supported an `icon` prop and the variants `"neutral"`, `"info"`, `"warning"`, and `"success"`. | No longer supports the `icon` prop and adds the `"danger"` variant. | Remove the `icon` prop. Use `"danger"` where appropriate. |
+| `Tabs` | Supported `"clear"`, `"card"`, and `"sunk"` variants. | Only supports `variant="clear"`. `TabsList` now has its own variant configuration. | Remove `"card"` and `"sunk"` from `Tabs`. Configure the appearance through `TabsList` instead. |
+| `Select` | Size was configured on `SelectTrigger` only. | Supports a `size` prop on both `Select` and `SelectTrigger`. | Optional: set the size on `Select` when needed. |
+| `Table` | Did not provide the newer alignment props and `ScrollableTable` component. | `TableHead` and `TableCell` support `align`; `ScrollableTable` is available for wide tables. | Optional: use `align="left"`, `"center"`, or `"right"` to control cell alignment. Use `ScrollableTable` for wide tables. |
+| `Button` / `IconButton` | Did not include the newer extra-small size options. | Adds `"extra-small"` to `Button` and `"3-extra-small"`, `"2-extra-small"`, and `"extra-small"` to `IconButton`. | Optional: use the new sizes when a more compact control is needed. |
+| `CrayonChat` | Exported as `CrayonChat`. | Renamed to `OpenUIChat`. | No action is needed for widgets. `OpenUIChat` is not intended for widget markup. |
+| `themePresets` / `experimentalThemePresets` | Exported theme preset utilities. | Removed; `createTheme` is the replacement. | Host applications that used these utilities must migrate to `createTheme`. Widgets do not need changes because the host provides the theme. |
+| CSS classes and variables | Used the `crayon-*` classes and `--crayon-*` CSS variables. | Uses the `openui-*` classes and `--openui-*` CSS variables. | Update custom widget CSS that references the old class names or CSS variables. |
+
+
+---
+
 ## Important Notes
 
+* We have upgraded our UI components and introduced several enhancements. Some existing applications or widgets may require minor updates to maintain compatibility.
 * Widgets must export a **default React component**.
 * The component receives input data through **props**.
 * Plugins are available globally and **do not require imports**.
 * Only the plugins provided by the runtime environment can be used inside widgets.
 
 These plugins allow widget developers to combine **React logic**, **CrayonAI UI components**, **icons**, and **Markdown rendering** to build rich and interactive UI components inside DronaHQ agents.
+
+---
+
+## Frequently Asked Questions
+
+<details>
+<summary>Why are some UI Components behaving differently in my existing application?</summary>
+
+We have upgraded our UI Components with several enhancements and improvements. As a result, some components may behave differently compared to their previous versions.
+
+Applications and widgets created before November 19, 2026, may require minor modifications to ensure compatibility with the updated UI Components.
+
+If you are experiencing unexpected behavior in your existing application or widgets, check the following:
+
+- **Component changes:** Verify whether the component you are using has been updated or renamed.
+- **Default behavior:** Check whether any previous default behavior now requires explicit configuration.
+- **Component properties:** Review whether any props have been renamed, removed, or modified.
+- **Migration requirements:** Update the affected components according to the migration instructions.
+
+For a complete list of affected components, behavior changes, and required updates, refer to the [UI Components Migration Guide](#ui-components-migration-guide).
+
+</details>
+
+<details>
+<summary>Do I need to update all my existing widgets?</summary>
+
+No. Most existing widgets should continue to work without modifications. However, widgets using components with updated behavior or properties may require minor changes.
+
+Refer to the UI Components Migration Guide to identify whether your widgets are affected.
+
+</details>
+
+<details>
+<summary>Where can I find the changes made to UI Components?</summary>
+
+Refer to the [UI Components Migration Guide](#ui-components-migration-guide) for details about the changes, affected components, and recommended migration steps.
+
+</details>
