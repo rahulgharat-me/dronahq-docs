@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 3
 title: "Building Apps"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';

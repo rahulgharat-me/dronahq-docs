@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 4
 title: "Connecting Data"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';

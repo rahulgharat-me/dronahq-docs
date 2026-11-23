@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 6
 title: "Publishing and Users"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';

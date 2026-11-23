@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 2
 title: "Sign-in and Access Tokens"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';
