@@ -1,0 +1,320 @@
+---
+sidebar_position: 8
+title: "Voice Providers"
+---
+
+# Voice Providers API
+
+The Voice Providers API lists the **text-to-speech and speech-to-text providers** your voice agents can use, with their models, and manages **your workspace's own key** for each one. It does what the **Voice Models** screen does: a key you save here appears there, and the other way round.
+
+## When to Use This
+
+- Check, before you build or call an agent, that its voice and transcriber providers have a key: `key_source` says which key a call would use.
+- Pick a model for `voice_config.model` or `transcriber.model`, and see which languages it supports.
+- Bring your own provider key (Enterprise plans), rotate it, switch it off, or remove it.
+
+To pick a **voice** (`voice_config.voiceId`) or an **LLM**, use [List voices](/agents/voice-agent/api/voice-agents#list-voices) and [List LLM models](/agents/voice-agent/api/voice-agents#list-llm-models) in the Voice Agents API.
+
+## Prerequisites
+
+- An [API Key](/agents/developer/api-keys) with the **Voice providers** scope. The older **Voice Agent** and **Agent Creator** scopes don't give access to this API.
+- A provider key serves **every agent** in the workspace, so only a key set to **All Agents** can change one. A key limited to some agents can read.
+- Saving a key needs a plan that uses your own keys. On a plan that uses the platform's keys, calls never use yours, so Save key is refused with `403`.
+
+## Authentication
+
+Every request must include your key, in the **`api-key`** header or as a Bearer token. See [API Keys](/agents/developer/api-keys) for how to create one. The examples on this page use `api-key`.
+
+```
+api-key: sk_<your-secret>
+```
+
+Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), including the failures.
+
+:::note Base path
+These endpoints are served at the **root** of your DronaHQ host: `https://<your-dronahq-host>/voice/providers`. There is no `/api/v1` prefix.
+:::
+
+## Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/voice/providers` | [List providers](#list-providers) |
+| `GET` | `/voice/providers/{provider}` | [Get a provider](#get-a-provider), with its models and your saved key |
+| `PUT` | `/voice/providers/{provider}/credentials` | [Save a key](#save-a-key) |
+| `PATCH` | `/voice/providers/{provider}/credentials` | [Switch a key on or off](#switch-a-key-on-or-off) |
+| `DELETE` | `/voice/providers/{provider}/credentials` | [Delete a key](#delete-a-key) |
+
+`{provider}` is the id an agent names in `voice_config.provider` or `transcriber.provider`, such as `elevenlabs` or `60db`. Upper and lower case are both accepted.
+
+## Which key a call uses
+
+`key_source` on every provider says what a call on it would authenticate with **right now**:
+
+| `key_source` | Meaning |
+|---|---|
+| `workspace` | Your own key: your plan uses your own keys, and the key is saved and switched on |
+| `managed` | The platform's key. Calls use it when you have no key of your own, or yours is switched off |
+| `none` | No key at all, so an agent using this provider fails to start. Every provider reads `none` while your plan isn't active |
+
+:::note Production
+The Voice Models screen saves a key per environment, but calls read **Production's**. This API reads and writes Production's key, and `connected`, `enabled` and `key_source` describe that key. Switching a key on or off changes every environment, as the screen's menu does.
+:::
+
+---
+
+## List providers
+
+`GET /voice/providers`
+
+Every text-to-speech and speech-to-text provider, sorted by name.
+
+| Query parameter | Description |
+|---|---|
+| `capability` | `tts` for text-to-speech providers only, `stt` for speech-to-text. Leave it out for both |
+
+```bash
+curl "https://<your-dronahq-host>/voice/providers?capability=tts" \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "plan_uses_own_keys": true,
+  "count": 1,
+  "providers": [
+    {
+      "provider": "elevenlabs",
+      "name": "ElevenLabs",
+      "description": "Access ElevenLabs' text-to-speech models by configuring your API credentials and environment settings.",
+      "tts": true,
+      "stt": true,
+      "coming_soon": false,
+      "managed": true,
+      "connected": true,
+      "enabled": true,
+      "key_source": "workspace",
+      "credential_fields": [
+        { "name": "api_key", "label": "API key", "required": true, "secret": true, "hint": "Enter API Key" },
+        { "name": "base_url", "label": "Base URL", "required": false, "secret": false, "hint": "Defaults to \"https://api.elevenlabs.io/v1\"" },
+        { "name": "custom_headers", "label": "Custom headers", "required": false, "secret": true, "hint": "{\"key1\":\"val1\", \"key2\":\"val2\"}" }
+      ],
+      "tts_model_count": 6,
+      "stt_model_count": 1,
+      "updated_at": "2026-11-18T10:42:07Z"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `plan_uses_own_keys` | `true` when your plan's calls use your own keys. When `false`, Save key is refused |
+| `tts`, `stt` | Whether the provider offers text-to-speech, speech-to-text, or both |
+| `coming_soon` | Not available yet. A key can't be saved for it |
+| `managed` | The platform holds a key for it |
+| `connected` | You have saved a key for it (Production) |
+| `enabled` | Your saved key is switched on |
+| `credential_fields` | The fields [Save a key](#save-a-key) takes, by `name`. `secret` fields read back as `<redacted>` |
+| `updated_at` | When your key was last saved, or `null` |
+
+## Get a provider
+
+`GET /voice/providers/{provider}`
+
+One provider, as the list shows it, plus its models and your saved key.
+
+```bash
+curl https://<your-dronahq-host>/voice/providers/elevenlabs \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+Abridged: one model of each kind, and one of each model's settings.
+
+```json
+{
+  "status": "success",
+  "provider": {
+    "provider": "elevenlabs",
+    "name": "ElevenLabs",
+    "…": "the fields List providers returns",
+    "credentials": {
+      "enabled": true,
+      "updated_at": "2026-11-18T10:42:07Z",
+      "fields": { "api_key": "<redacted>" }
+    },
+    "tts_models": [
+      {
+        "model": "eleven_v4_turbo",
+        "description": "Eleven v4 Turbo — real-time variant of Eleven v4, built for voice agents.",
+        "details": null,
+        "languages": ["en-US", "en-GB", "hi-IN", "es-ES", "fr-FR"],
+        "streaming": true,
+        "voice_cloning": true,
+        "multilingual": true,
+        "latency_tier": "low",
+        "hipaa_compliant": true,
+        "pci_compliant": false,
+        "settings": {
+          "speed": { "type": "range", "field": "speed", "label": "Speed", "min": 0.7, "max": 1.2, "step": 0.05, "default": 1 }
+        }
+      }
+    ],
+    "stt_models": [
+      {
+        "model": "scribe_v2",
+        "description": "ElevenLabs Scribe v2 — state-of-the-art batch STT across 90+ languages.",
+        "details": null,
+        "languages": ["en", "es", "fr", "de", "hi", "multi"],
+        "streaming": false,
+        "language_auto_detect": true,
+        "diarization": true,
+        "keyword_boost": true,
+        "custom_vocabulary": false,
+        "latency_tier": "medium",
+        "hipaa_compliant": false,
+        "pci_compliant": false,
+        "settings": {
+          "diarize": { "type": "boolean", "field": "diarize", "label": "Speaker Diarization", "default": false }
+        }
+      }
+    ]
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `credentials` | Your saved key, or `null` when there is none. Secret fields (`api_key`, `custom_headers`) read back as `<redacted>` |
+| `tts_models`, `stt_models` | The models, for `voice_config.model` and `transcriber.model`. `languages` are the codes each supports |
+| `settings` | The controls the agent builder shows for the model, with their ranges and defaults |
+
+## Save a key
+
+`PUT /voice/providers/{provider}/credentials`
+
+Saves your own key for the provider, or changes it. Every agent in the workspace then uses it. Saving also switches the key on.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `credentials` | object | Yes | The provider's `credential_fields` by `name`, each a string. Usually just `api_key` |
+
+The rules for `credentials`:
+
+- **Only the provider's fields.** A field the provider doesn't have is a `422` listing the ones it has. You can write `api-key` for `api_key`.
+- **Required fields on the first save only.** When you change a saved key, send only the fields you change. A field left out, or sent as `<redacted>`, keeps its saved value.
+- **A new `api_key` is checked with the provider first.** If the provider rejects it, the response is `422` and nothing is saved.
+- **`base_url`** must be an `https` URL on a public host, with no user name or password. Calls send your key there.
+- **`custom_headers`** is a JSON object of strings, sent as text, such as `"{\"X-Team\": \"ops\"}"`.
+- **`region`** (Azure) is a bare region name, such as `centralindia`.
+
+### Example request
+
+```bash
+curl -X PUT https://<your-dronahq-host>/voice/providers/elevenlabs/credentials \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{ "credentials": { "api_key": "sk_your_elevenlabs_key" } }'
+```
+
+### Response — `201 Created`
+
+`201` with `created: true` on the first save, `200` with `created: false` on a change. `provider` is the provider as [Get a provider](#get-a-provider) returns it.
+
+```json
+{
+  "status": "success",
+  "created": true,
+  "provider": {
+    "provider": "elevenlabs",
+    "connected": true,
+    "enabled": true,
+    "key_source": "workspace",
+    "credentials": { "enabled": true, "updated_at": "2026-11-18T10:42:07Z", "fields": { "api_key": "<redacted>" } },
+    "…": "the rest of Get a provider"
+  }
+}
+```
+
+## Switch a key on or off
+
+`PATCH /voice/providers/{provider}/credentials`
+
+Switches your saved key off or back on, in every environment, as **Enable** / **Disable** does on the Voice Models screen. While it is off, calls use the platform's key if there is one. The response's `key_source` shows which.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | Yes | `false` switches your key off, `true` back on |
+
+```bash
+curl -X PATCH https://<your-dronahq-host>/voice/providers/elevenlabs/credentials \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{ "enabled": false }'
+```
+
+### Response — `200 OK`
+
+`{ "status": "success", "provider": { … } }`, with the provider as [Get a provider](#get-a-provider) returns it. A provider with no saved key is a `404`.
+
+## Delete a key
+
+`DELETE /voice/providers/{provider}/credentials`
+
+Removes your saved key (Production), as **Reset configuration** does. Calls then use the platform's key if there is one, or fail. For **ElevenLabs** and **Cartesia**, this also removes the voices you added or cloned with that key.
+
+```bash
+curl -X DELETE https://<your-dronahq-host>/voice/providers/elevenlabs/credentials \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+`{ "status": "success", "provider": { … } }`, with `connected: false` and `credentials: null`. A provider with no saved key is a `404`.
+
+---
+
+## Errors
+
+### Error shapes
+
+Every error has a `detail` field, but its shape depends on the error:
+
+| `detail` is | When |
+|---|---|
+| A string | `401`, and a `403` for a key without the **Voice providers** scope |
+| An object with a `message` | Every other refusal below, and `500` / `502` |
+| An array of errors | A body or parameter that fails validation (`422`): an unknown body field, an empty `credentials`, a value that isn't a string, or a `capability` other than `tts` / `stt` |
+
+```json
+{ "detail": { "message": "credentials.apikey is not a field of this provider.", "fields": ["api_key", "base_url", "custom_headers"] } }
+```
+
+### Status codes
+
+| HTTP status | Cause | Fix |
+|---|---|---|
+| `401` | The key is missing, unknown, disabled or expired | Check the key under **Developer → API Keys** |
+| `403` | The key lacks the **Voice providers** scope (`voice_providers:read` for a GET, `voice_providers:write` for the rest) | Add **Voice providers** to the key |
+| `403` | A write with a key limited to some agents | Use a key set to **All Agents** |
+| `403` | Save key on a plan that uses the platform's keys | Bringing your own key needs an Enterprise plan |
+| `404` | No provider with this id, or, on switch and delete, no saved key for it | Check the id with [List providers](#list-providers) |
+| `409` | Save key for a provider that is `coming_soon` | Wait until it is available |
+| `422` | A field the provider doesn't have, a required field missing on the first save, an empty required field, a rejected `api_key`, or a `base_url`, `region` or `custom_headers` that breaks the rules above | Read `detail.message` |
+| `500` | Unexpected server error. Nothing was saved | Retry; contact support if it persists |
+| `502` | Your plan couldn't be read | Retry |
+
+## What's Next
+
+- [Voice Agents](/agents/voice-agent/api/voice-agents): set an agent's `voice_config` and `transcriber`, and list its [voices](/agents/voice-agent/api/voice-agents#list-voices) and [LLM models](/agents/voice-agent/api/voice-agents#list-llm-models)
+- [API Keys](/agents/developer/api-keys): scopes and Agent Access
+- [Request Logs](/agents/developer/request-logs): see what your integration sent

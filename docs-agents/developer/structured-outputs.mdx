@@ -1,0 +1,452 @@
+---
+sidebar_position: 5
+title: "Structured Outputs"
+---
+
+# Structured Outputs API
+
+The Structured Outputs API lists, creates, changes, copies and deletes the **structured outputs** in your workspace, reads the ready-made ones in the **library**, and tests any of them against a finished call or chat. It does what the **Structured Output** screen does: an output you create here appears there, and the other way round.
+
+A structured output is a rule for pulling one typed value out of a conversation: a yes/no, a score, a category, a date, a list. After each call or chat, every output linked to the agent is extracted and the results land in the call log and the post-call webhook. Structured outputs belong to the workspace and are used by chat agents and voice agents alike, so this API is not under `/voice`.
+
+## When to Use This
+
+- Keep your extraction rules in your own repository and push them when they change.
+- Set up the same outputs in many workspaces, or for many agents, without clicking through the screen.
+- Try a change against a real call before any agent uses it.
+
+This API doesn't cover everything:
+
+- It doesn't link outputs to agents. Link one to a voice agent by adding its `output_id` to `config.structured_outputs_json` with the [Voice Agents API](/agents/voice-agent/api/voice-agents), or in the builder. Chat agents are linked in the builder.
+- The library's entries can't be changed. [Duplicate](#duplicate-a-structured-output) one to get a copy you can edit.
+
+## Prerequisites
+
+- An [API Key](/agents/developer/api-keys) with the **Structured outputs** scope.
+- The older **Voice Agent** and **Agent Creator** scopes don't give access to this API. To use an older key, edit it under **Developer → API Keys** and add the **Structured outputs** scope.
+- The key's **Agent Access** decides which structured outputs it reaches. See [Keys limited to some agents](#keys-limited-to-some-agents).
+
+## Authentication
+
+Every request must include your key, in the **`api-key`** header or as a Bearer token. See [API Keys](/agents/developer/api-keys) for how to create one. The examples on this page use `api-key`.
+
+```
+api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
+```
+
+Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), including the failures.
+
+:::note Base path
+These endpoints are served at the **root** of your DronaHQ host: `https://<your-dronahq-host>/structured_outputs`. There is no `/api/v1` prefix, and the path uses an underscore.
+:::
+
+## Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/structured_outputs` | [List structured outputs](#list-structured-outputs) |
+| `GET` | `/structured_outputs/{output_id}` | [Get a structured output](#get-a-structured-output) |
+| `POST` | `/structured_outputs` | [Create a structured output](#create-a-structured-output) |
+| `PATCH` | `/structured_outputs/{output_id}` | [Update a structured output](#update-a-structured-output) |
+| `DELETE` | `/structured_outputs/{output_id}` | [Delete a structured output](#delete-a-structured-output) |
+| `POST` | `/structured_outputs/{output_id}/duplicate` | [Duplicate a structured output](#duplicate-a-structured-output) |
+| `POST` | `/structured_outputs/test_runs` | [Test a structured output](#test-a-structured-output) |
+| `GET` | `/structured_outputs/library` | [List the library](#list-the-library) |
+| `GET` | `/structured_outputs/library/{library_id}` | [Get a library entry](#get-a-library-entry) |
+
+A structured output is identified by its `output_id`, a UUID assigned when it is created. Library entries have ids of the form `LSO-<n>`; those ids work with Duplicate, Test and the library routes, and are a `404` on the others.
+
+## Keys limited to some agents
+
+A structured output belongs to the workspace, not to one agent, so a key set to **All Agents** reaches every structured output. A key limited to **specific agents** reaches what its agents use:
+
+| The key | Which structured outputs |
+|---|---|
+| Sees, updates, duplicates and tests | Outputs linked to one of its agents, and outputs linked to no agent. One linked only to other agents is left out of the list, and a request for it fails with `403` |
+| Creates | Any output. A new one is linked to no agent |
+| Deletes | An output whose agents are all on its list. Otherwise it's a `403`, because deleting it would take it away from them |
+| Tests against | Only calls and chats made by one of its agents |
+
+Every agent that links an output counts, chat or voice, whether it's linked in the agent's draft or in its published version. The library isn't limited: any key with the scope reads all of it.
+
+The same key can't widen this through the [Voice Agents API](/agents/voice-agent/api/voice-agents) either: linking an output that only other agents use to one of its own agents is refused with `422`.
+
+An update changes what every linked agent extracts, including agents outside the key's list.
+
+---
+
+## The definition
+
+Create, Update and Test take the same fields, and every response returns them:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Up to 255 characters. Doesn't have to be unique |
+| `description` | string | Shown in the builder. Up to 5000 characters |
+| `schema_type` | string | The result's type: `boolean`, `string`, `enum`, `number`, `integer`, `array` or `object` |
+| `input_type` | string | `ai` (default) asks a model; `regex` matches a pattern |
+| `schema_config` | object | What to extract, by type. See below |
+| `advanced_settings` | object | The model an `ai` output uses: `ai_provider` and `ai_model` (send both together), `temperature` (0–2) and `max_tokens`. `null` for `temperature` or `max_tokens` means the model's own default. Defaults to `openai` / `gpt-4o-mini` |
+
+`schema_config` by type:
+
+| `schema_type` | `schema_config` |
+|---|---|
+| `boolean`, `string`, `number`, `integer` | `instruction`, and optionally `min_length` / `max_length` (strings) or `min_value` / `max_value` (numbers) |
+| `enum` | `instruction`, `enum` (the allowed values, unique, not empty), and optionally `enum_descriptions` (`{ "value": "what it means" }`) and `multiple: true` to allow several |
+| `object` | `instruction`, and `properties`: an array of `{ "name", "type", "description", "required" }`. A property can be an `enum` with its own `enum` list, or an `object` with its own `properties` |
+| `array` | `properties`, as for an object (one per column), and `items` |
+| Any type, with `input_type: "regex"` | `pattern`, and optionally `flags`: any of `i` (ignore case), `m` (multiline), `s` (dot matches newline) |
+
+The easiest way to get a valid `schema_config` for a complicated output is to build it once on the **Structured Output** screen and read it back with [Get a structured output](#get-a-structured-output).
+
+:::note What is checked when you save
+- The fields and their types, an `enum` with no values or repeated values, and `multiple` on anything but an `enum`. These are a `422`, or a `400` for the enum rules.
+- A regex output's pattern: it must be present and valid, can't use lookarounds (`(?=`, `(?<=`, …) or backreferences (`\1`), and an `object` can't be extracted with a regex. These are a `422`.
+- The instruction and the other keys in `schema_config` aren't checked. A misspelt key is saved and has no effect.
+:::
+
+---
+
+## List structured outputs
+
+`GET /structured_outputs`
+
+Returns the structured outputs the key can see, newest first. The library isn't included; see [List the library](#list-the-library).
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | `100` | How many to return, from 1 to 1000 |
+| `offset` | integer | `0` | How many to skip |
+
+```bash
+curl "https://<your-dronahq-host>/structured_outputs?limit=20" \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "total_count": 1,
+  "limit": 20,
+  "offset": 0,
+  "structured_outputs": [
+    {
+      "output_id": "8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7",
+      "name": "Lead temperature",
+      "description": "How ready the caller is to buy.",
+      "schema_type": "enum",
+      "input_type": "ai",
+      "schema_config": {
+        "instruction": "Classify the lead by their interest and readiness to buy.",
+        "enum": ["hot", "warm", "cold"],
+        "enum_descriptions": { "hot": "asked to proceed, or gave a buying timeline under 30 days" }
+      },
+      "advanced_settings": { "ai_provider": "openai", "ai_model": "gpt-4o-mini", "temperature": null, "max_tokens": null },
+      "linked_agents_count": 2,
+      "created_by": "api-key:crm-sync",
+      "created_at": "2026-11-17T09:30:00",
+      "updated_by": "api-key:crm-sync",
+      "updated_at": "2026-11-17T10:05:12"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `total_count` | How many structured outputs the key can see, across all pages |
+| `linked_agents_count` | How many agents link it, chat or voice, in a draft or a published version. Counts every agent in the workspace, not only the key's |
+| `created_by`, `updated_by` | Who created it and last changed it: an email for the screen, `api-key:<key name>` for this API |
+| `created_at`, `updated_at` | When, in UTC |
+
+---
+
+## Get a structured output
+
+`GET /structured_outputs/{output_id}`
+
+Returns one structured output, in the same shape as an item of [List structured outputs](#list-structured-outputs).
+
+```bash
+curl https://<your-dronahq-host>/structured_outputs/8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7 \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "structured_output": { "output_id": "8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7", "name": "Lead temperature", "…": "…" }
+}
+```
+
+---
+
+## Create a structured output
+
+`POST /structured_outputs`
+
+Creates a structured output. It is linked to no agent until you link it.
+
+### Body
+
+The fields of [the definition](#the-definition). `name` and `schema_type` are required. An unknown field is **rejected** with `422`.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/structured_outputs \
+  -H "Content-Type: application/json" \
+  -H "api-key: sk_your-generated-secret-here" \
+  -d '{
+    "name": "Lead temperature",
+    "description": "How ready the caller is to buy.",
+    "schema_type": "enum",
+    "schema_config": {
+      "instruction": "Classify the lead by their interest and readiness to buy.",
+      "enum": ["hot", "warm", "cold"],
+      "enum_descriptions": { "hot": "asked to proceed, or gave a buying timeline under 30 days" }
+    }
+  }'
+```
+
+### Response — `201 Created`
+
+The new structured output, in the shape of [Get a structured output](#get-a-structured-output), with `linked_agents_count: 0` and the default `advanced_settings` filled in.
+
+Then link it to a voice agent:
+
+```bash
+curl -X PATCH https://<your-dronahq-host>/voice/agents/<agent_uuid> \
+  -H "Content-Type: application/json" \
+  -H "api-key: sk_your-generated-secret-here" \
+  -d '{ "config": { "structured_outputs_json": ["8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7", "LSO-1"] } }'
+```
+
+`structured_outputs_json` is replaced whole, so send every output the agent should keep. That request needs the **Voice agents** scope as well. Add `"publish": true` for calls on your numbers and campaigns to use it straight away; until then only test calls do.
+
+---
+
+## Update a structured output
+
+`PATCH /structured_outputs/{output_id}`
+
+Changes only the fields you send. Send at least one.
+
+- `schema_config` is replaced whole.
+- `advanced_settings` is merged onto the stored settings, so `{ "temperature": 0.2 }` keeps the model.
+- `description: null` clears the description. `name`, `schema_type`, `input_type` and `schema_config` can't be `null`.
+
+```bash
+curl -X PATCH https://<your-dronahq-host>/structured_outputs/8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7 \
+  -H "Content-Type: application/json" \
+  -H "api-key: sk_your-generated-secret-here" \
+  -d '{ "description": "How ready the caller is to buy, from the whole call.", "advanced_settings": { "temperature": 0.2 } }'
+```
+
+### Response — `200 OK`
+
+The structured output as it is now, in the shape of [Get a structured output](#get-a-structured-output).
+
+:::caution Every linked agent changes at once
+Agents link a structured output by id, so an update takes effect on every agent that uses it from its next call or chat, published agents included. Changing `schema_type` changes the shape your webhook receives. To try a change first, [test it](#test-a-structured-output), or [duplicate](#duplicate-a-structured-output) the output and change the copy.
+:::
+
+---
+
+## Delete a structured output
+
+`DELETE /structured_outputs/{output_id}`
+
+Deletes the structured output permanently.
+
+```bash
+curl -X DELETE https://<your-dronahq-host>/structured_outputs/8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7 \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{ "status": "success", "output_id": "8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7", "linked_agents_count": 2 }
+```
+
+Agents that linked it keep its id in their settings and stop extracting it. `linked_agents_count` says how many there were; remove the id from them to tidy up.
+
+---
+
+## Duplicate a structured output
+
+`POST /structured_outputs/{output_id}/duplicate`
+
+Copies a structured output, or a library entry by its `LSO-` id, into a new structured output you can change. No body.
+
+- A workspace output's copy is named `Copy of <name>`. A library entry's copy keeps the entry's name.
+- A name over 247 characters can't be copied: with `Copy of ` in front it would pass the 255-character limit. That's a `400`; shorten the name first.
+- The copy is linked to no agent, and has a new `output_id`.
+
+```bash
+curl -X POST https://<your-dronahq-host>/structured_outputs/LSO-1/duplicate \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `201 Created`
+
+The copy, in the shape of [Get a structured output](#get-a-structured-output).
+
+---
+
+## Test a structured output
+
+`POST /structured_outputs/test_runs`
+
+Runs one structured output over a finished voice call or chat and returns the result, without changing any agent. Use it to check a new output, or a change, against a real conversation.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `agent_type` | string | Yes | `voice` when `run_id` is a call, `chat` when it's a chat run |
+| `run_id` | string | Yes | A call's `call_id` from the [Call Data API](/agents/voice-agent/api/calls), or a chat run's id from the agent's traces |
+| `output_id` | string | One of these two | A saved structured output, or a library id |
+| `structured_output` | object | One of these two | An unsaved definition: the fields of [the definition](#the-definition), with `schema_type` required and `name` optional |
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/structured_outputs/test_runs \
+  -H "Content-Type: application/json" \
+  -H "api-key: sk_your-generated-secret-here" \
+  -d '{ "agent_type": "voice", "run_id": "c41f0d2e-7b1a-4f0e-9a52-2d8f3c6b9e10", "output_id": "8b0c6a52-3e1d-4c7f-9f2a-61d4e8b3c0a7" }'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "test_run_id": "5d2e9c41-0a7b-4b6f-8e13-9f0c2a7d4b58",
+  "result": "hot",
+  "error": null,
+  "rejected_value": null,
+  "notes": []
+}
+```
+
+| Field | Description |
+|---|---|
+| `result` | The extracted value, in the output's type. `null` when nothing was found |
+| `error` | Why the extraction failed, when it did. `result` is then `null` too |
+| `rejected_value` | For an `enum`: an answer the model gave that isn't one of the allowed values, so it was dropped |
+| `notes` | What the test couldn't reproduce, for example the call's dynamic variables, which aren't stored with the call |
+
+- A test runs the extraction for real: an `ai` output uses AI credits, as it would on a live call.
+- An unsaved definition is checked as [a save is](#the-definition) before anything runs, so a test can't spend credits on one you couldn't save.
+- Calls are kept for 30 days; an older `call_id` is a `404`. A call with no stored transcript, or where only the agent spoke, is a `400` saying so.
+
+---
+
+## List the library
+
+`GET /structured_outputs/library`
+
+Returns the ready-made structured outputs that come with the product: names, phone numbers, emails, sentiment, intent, lead scores and more. Link one to a voice agent by its `LSO-` id as it is, or [duplicate](#duplicate-a-structured-output) it to change a copy.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `channel` | string | all | `voice` or `chat`: only the entries offered for that agent type |
+
+```bash
+curl "https://<your-dronahq-host>/structured_outputs/library?channel=voice" \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "total_count": 1,
+  "library": [
+    {
+      "output_id": "LSO-1",
+      "name": "Customer Name",
+      "description": "Name of the contacted user, learner, parent or customer, extracted only when clearly stated.",
+      "schema_type": "string",
+      "input_type": "ai",
+      "schema_config": { "instruction": "Extract the name of the contacted user, learner, parent or customer. …" },
+      "advanced_settings": { "ai_provider": "openai", "ai_model": "gpt-4o-mini", "temperature": null, "max_tokens": null },
+      "channels": ["voice", "chat"]
+    }
+  ]
+}
+```
+
+`channels` lists the agent types the builder offers the entry on. The library is the same for every workspace, and isn't paged.
+
+---
+
+## Get a library entry
+
+`GET /structured_outputs/library/{library_id}`
+
+Returns one library entry, in the same shape as an item of [List the library](#list-the-library).
+
+```bash
+curl https://<your-dronahq-host>/structured_outputs/library/LSO-1 \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+---
+
+## Errors
+
+### Error shapes
+
+Every error has a `detail` field, but its shape depends on the error:
+
+| `detail` is | When |
+|---|---|
+| A string, for example `"Structured output not found."` | `401` and `403` from the key or its Agent Access, `404`, `400` from a duplicate, and `400` from a test's call or chat run |
+| An object with a `message` | `400` from the enum rules on create, update or a test's unsaved definition, and `500` |
+| An array of errors | A body that fails validation (`422`) |
+
+```json
+{ "detail": { "status": "error", "message": "schema_config.enum must be a non-empty list for schema_type 'enum'" } }
+```
+
+```json
+{ "detail": [ { "type": "value_error", "loc": ["body", "schema_config"], "msg": "schema_config.pattern is required when input_type is 'regex'", "input": null } ] }
+```
+
+### Status codes
+
+| HTTP status | Cause | Fix |
+|---|---|---|
+| `400` | Create, update, or a test's unsaved definition: an `enum` with no values or repeated values, or `multiple` on a type that isn't `enum`. Duplicate: the copy's name would be over 255 characters. Test: the call has no transcript, or only the agent spoke | Fix what the message names |
+| `401` | The key is missing, unknown, disabled or expired | Check the key under **Developer → API Keys**: it must be enabled and not expired |
+| `403` | The key lacks the **Structured outputs** scope | Add **Structured outputs** to the key |
+| `403` | The key's **Agent Access** doesn't reach the structured output, the delete would take it from agents outside it, or the test's call or chat was made by an agent outside it | See [Keys limited to some agents](#keys-limited-to-some-agents) |
+| `404` | No structured output with this id in the key's workspace, or a library id on a route that only takes workspace outputs. Test: no such call or chat run in the workspace | Check the id with [List structured outputs](#list-structured-outputs) or [List the library](#list-the-library) |
+| `422` | The body is invalid: an unknown or missing field, a wrong type, `ai_provider` without `ai_model`, an empty update, both or neither of `output_id` and `structured_output` on a test, or a regex output whose pattern is missing or invalid | Read `detail` |
+| `500` | Unexpected server error. `detail.message` names the action, for example `Could not create the structured output.` | Retry; contact support if it persists |
+
+## What's Next
+
+- [Voice Agents](/agents/voice-agent/api/voice-agents): link structured outputs to an agent with `config.structured_outputs_json`
+- [Call Data](/agents/voice-agent/api/calls): read each call's extracted values, and find a `call_id` to test against
+- [API Keys](/agents/developer/api-keys): scopes and Agent Access
