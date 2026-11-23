@@ -1,5 +1,37 @@
 [
   {
+    "timestamp": 1793251170000,
+    "tags": [
+      "Self-Hosted",
+      "3.11.1-edge"
+    ],
+    "heading": "Version 3.11.1-edge",
+    "cards": [
+      {
+        "title":"Fixed",
+        "type":"fixed",
+        "points":["Fixed an issue where users were not automatically activated after SSO bulk upload."
+]
+      }
+    ]
+  },
+  {
+    "timestamp": 1791868770000,
+    "tags": [
+      "Self-Hosted",
+      "3.11.0-edge"
+    ],
+    "heading": "Version 3.11.0-edge",
+    "cards": [
+      {
+        "title":"Fixed",
+        "type":"fixed",
+        "points":["Fixed an issue where unquoted url identifiers in DronaHQ database routines caused MySQL 8.4 upgrade pre-checks to fail."
+]
+      }
+    ]
+  },
+  {
     "timestamp": 1791182779000,
     "tags": [
       "Self-Hosted",
