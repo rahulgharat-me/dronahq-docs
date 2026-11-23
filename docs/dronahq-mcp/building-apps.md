@@ -1,12 +1,12 @@
 ---
-sidebar_position: 5
+sidebar_position: 4
 title: "Building Apps"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';
 
 # Building apps
 
-Once your AI client is [connected](./connect-ai-client.md), you build by describing what you want. Mention DronaHQ in your prompt so the agent uses DronaHQ tools rather than writing a standalone project.
+Once your AI client is [connected](./getting-started.md), you build by describing what you want. Mention DronaHQ in your prompt so the agent uses DronaHQ tools rather than writing a standalone project.
 
 ## How a build goes
 

@@ -67,6 +67,6 @@ Your AI client always acts as you, with your role. It can never do more than you
 
 ## Next steps
 
-1. [Connect your AI client](./connect-ai-client.md)
+1. [Connect your AI client](./getting-started.md)
 2. Learn how [sign-in and access tokens](./sign-in-and-access-tokens.md) work
 3. [Build your first app](./building-apps.md)
