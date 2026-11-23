@@ -1,12 +1,12 @@
 ---
-sidebar_position: 2
-title: "Getting Started"
+sidebar_position: 3
+title: "Connect Your AI Client"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Getting started
+# Connect your AI client
 
 Connecting takes about two minutes. You add your workspace's MCP server URL to your AI client, then sign in to DronaHQ when the client asks. You don't need to copy a token.
 

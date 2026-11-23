@@ -6,9 +6,9 @@ pagination_prev: null
 import VideoEmbed from "@site/src/components/VideoEmbed";
 import Thumbnail from '@site/src/components/Thumbnail';
 
-# DronaHQ Vibe MCP
+# DronaHQ MCP
 
-DronaHQ Vibe MCP connects your DronaHQ workspace to an AI client such as Claude Code, Claude, Cursor, VS Code or Windsurf, over the Model Context Protocol (MCP). Your AI client gets more than a place to write frontend code. It gets a production backend it can build and ship on: authentication, role-based access control (RBAC), a secrets vault, database and API connectors, environments, hosting and audit logging.
+DronaHQ MCP connects your DronaHQ workspace to an AI client such as Claude Code, Claude, Cursor, VS Code or Windsurf, over the Model Context Protocol (MCP). Your AI client gets more than a place to write frontend code. It gets a production backend it can build and ship on: authentication, role-based access control (RBAC), a secrets vault, database and API connectors, environments, hosting and audit logging.
 
 There's no server to stand up, no CI/CD pipeline to configure, no SSL certificate to manage and no middleware to write. Building through MCP uses your own AI client, so it doesn't use DronaHQ AI credits.
 
@@ -16,12 +16,12 @@ There's no server to stand up, no CI/CD pipeline to configure, no SSL certificat
   <VideoEmbed host='youtube' videoId='21eyFKVqlPE' />
 </figure>
 
-## Why use DronaHQ Vibe MCP
+## Why use DronaHQ MCP
 
 A coding agent can generate a working admin panel or internal tool in minutes. Shipping it is where the time goes: deciding where it runs, who can access it, where the database credentials live, how it reaches services behind a VPN, what a rollback looks like and who signs off on the release. Multiply that by every internal tool your team needs and it adds up.
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/thumbnail.png" alt="DronaHQ Vibe MCP overview" />
+  <Thumbnail src="/img/dronahq-mcp/thumbnail.png" alt="DronaHQ MCP overview" />
 </figure>
 
 ### What you get
@@ -54,7 +54,7 @@ See the [tool reference](./tool-reference.md) for every tool.
 
 ## Who can use it
 
-DronaHQ Vibe MCP is for the people who build in your workspace:
+DronaHQ MCP is for the people who build in your workspace:
 
 | Role | Can connect | Notes |
 | --- | --- | --- |
@@ -67,6 +67,6 @@ Your AI client always acts as you, with your role. It can never do more than you
 
 ## Next steps
 
-1. [Connect your AI client](./getting-started.md)
+1. [Connect your AI client](./connect-ai-client.md)
 2. Learn how [sign-in and access tokens](./sign-in-and-access-tokens.md) work
 3. [Build your first app](./building-apps.md)

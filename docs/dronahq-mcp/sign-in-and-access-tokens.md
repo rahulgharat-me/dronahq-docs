@@ -1,12 +1,12 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: "Sign-in and Access Tokens"
 ---
 import Thumbnail from '@site/src/components/Thumbnail';
 
 # Sign-in and access tokens
 
-An AI client can connect to DronaHQ Vibe MCP in two ways. Both give the client exactly your role and permissions, nothing more.
+An AI client can connect to DronaHQ MCP in two ways. Both give the client exactly your role and permissions, nothing more.
 
 | | Sign-in (OAuth) | Access token |
 | --- | --- | --- |

@@ -1,11 +1,11 @@
 ---
-sidebar_position: 9
+sidebar_position: 10
 title: "Tool Reference"
 ---
 
 # Tool reference
 
-Every tool DronaHQ Vibe MCP exposes, what it does, and the minimum access it needs. **Read-only** tools never change anything. Your AI client may show this as a read-only or destructive hint.
+Every tool DronaHQ MCP exposes, what it does, and the minimum access it needs. **Read-only** tools never change anything. Your AI client may show this as a read-only or destructive hint.
 
 Owners and admins have Owner access to every app and connector, so the app and connector requirements below apply to creators. See [Permissions](./permissions.md).
 

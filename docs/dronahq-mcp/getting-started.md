@@ -1,7 +1,6 @@
 ---
 sidebar_position: 2
 title: "Getting Started"
-pagination_prev: null
 ---
 import VideoEmbed from "@site/src/components/VideoEmbed";
 import Image from '@site/src/components/Image';
@@ -67,7 +66,7 @@ Choose **Connect via MCP** for external AI clients.
 
 ### Step 2 : Get MCP credentials
 
-1. Click **Connect Vibe MCP** on the home screen.
+1. Click **Connect DronaHQ MCP** on the home screen.
 2. In the drawer, pick or create an MCP server (e.g. `Vibe App MCP`).
 3. Select your client tab: **Cursor**, **Windsurf**, **VS Code**, **Claude Code**, or **Manual**.
 4. Copy the generated command or config snippet. It includes:
@@ -83,7 +82,7 @@ Treat the token like a password. Use **Rotate org secret** or **Regenerate token
 
 ### Step 3 : Add MCP server to your AI client
 
-DronaHQ Vibe MCP is a standard HTTP-transport MCP server, so it can be registered in any MCP-compatible client. Pick the tab that matches your setup.
+DronaHQ MCP is a standard HTTP-transport MCP server, so it can be registered in any MCP-compatible client. Pick the tab that matches your setup.
 
 #### Cursor
 
@@ -283,7 +282,7 @@ The agent edits via `vibe_write_file` → `vibe_save_app` and updates the databa
 | Preview shows mock data | Open inside Studio preview (not raw HTML); check the Connected badge |
 | `vibe_save_app` needed | Changes from `vibe_write_file` are not live until saved |
 | Automation tools fail | Automation server may be offline; app CRUD still works via connector |
-| Token expired | Regenerate in the Connect Vibe MCP drawer |
+| Token expired | Regenerate in the Connect DronaHQ MCP drawer |
 
 ---
 
