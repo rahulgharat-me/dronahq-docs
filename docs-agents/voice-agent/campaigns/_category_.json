@@ -3,6 +3,6 @@
     "position": 2,
     "link": {
         "type": "generated-index",
-        "description": "Programmatic APIs for controlling voice agents."
+        "description": "Create, schedule, and monitor outbound voice campaigns — from the UI or the Campaign API."
     }
 }

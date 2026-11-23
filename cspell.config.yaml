@@ -34,6 +34,7 @@ words:
   - arrrelusingfkeyon
   - arrrelusingmanualmapping
   - asdict
+  - Asha
   - atleast
   - autocompleting
   - autoeventtriggercleanupconfig
@@ -115,6 +116,7 @@ words:
   - dbname
   - Dbname
   - Ddtdtgb
+  - DDTHH
   - deleteatpathargexp
   - deleteelemargexp
   - deletekeyargexp
@@ -188,6 +190,8 @@ words:
   - hyperscale
   - Hyperscale
   - ICXV
+  - idempotency
+  - Idempotency
   - IEMDAT
   - Iiwg
   - Iiwia
@@ -223,6 +227,7 @@ words:
   - JWTs
   - Kamila
   - Karnataka
+  - Kolkata
   - Koramangala
   - koyeb
   - Koyeb
@@ -335,6 +340,7 @@ words:
   - pgdump
   - pgpoolsettings
   - pgsourceconnectioninfo
+  - pickedup
   - pincode
   - pkcolumnsargexp
   - pkey
@@ -383,6 +389,7 @@ words:
   - remoteschemapermission
   - remotetable
   - remotetypecustomization
+  - replayable
   - replyto
   - reqs
   - requesttransformation
@@ -525,3 +532,13 @@ words:
   - Yugabyte
   - Yywg
   - Zuckerberg
+  - CLDR
+  - Minh
+  - deepgram
+  - elevenlabs
+  - endpointing
+  - openai
+  - plivo
+  - Rahul
+  - slugified
+  - unbilled

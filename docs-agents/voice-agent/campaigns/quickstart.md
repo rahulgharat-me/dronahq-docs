@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 1
 title: "Quickstart"
 pagination_prev: null
 ---
@@ -12,6 +12,10 @@ import Thumbnail from '@site/src/components/Thumbnail';
 
 
 Learn how to create and launch a personalized outbound campaign in DronaHQ agentic platform for post-service feedback and follow-up calls. This guide covers campaign setup, recipient management, scheduling, and launch.
+
+:::tip Prefer to do this from code?
+Everything on this page is also available programmatically — see the [Campaign API](/agents/voice-agent/api/campaigns) to create campaigns from your CRM or scheduler, add contacts as leads arrive, and pause, resume, or stop a run from your own systems.
+:::
 
 ## Prerequisites
 
@@ -89,3 +93,20 @@ If scheduling is left disabled, the campaign launches immediately after creation
 - Click **Schedule Campaign** to confirm.
 
 If a start date and time were set, the campaign queues and begins dialing automatically at that time within the configured calling window. Otherwise, calling starts immediately.
+
+## Adding contacts later
+
+You don't have to finalize the list before launching. Contacts can be added to a campaign that already exists — including one that has already finished — from the campaign's detail page or through the API.
+
+What happens next depends on where the campaign is:
+
+- **Still dialing its original list** — the campaign is paused so the list can be extended safely, and stays paused until you resume it.
+- **Between retry attempts** — nothing is dialing, so the new contacts start right away.
+- **Scheduled, or already finished** — the contacts are only staged. A scheduled campaign picks them up when it fires; a finished one dials nothing until you explicitly launch them.
+
+Duplicates are detected against the contacts already in the campaign and withheld, so re-uploading an overlapping list will not call anyone twice.
+
+## What's Next
+
+- [Campaign Overview](/agents/voice-agent/campaigns/overview) — read results, recordings, transcripts, and per-call costs
+- [Campaign API](/agents/voice-agent/api/campaigns) — do all of this programmatically

@@ -32,6 +32,7 @@ Create a new user, checking if the user already exists before adding.
 ```json
 {
     "userName": "newuser@example.com",
+    "name": "New User",
     "active": true,
     "emails": [
         {
@@ -50,6 +51,7 @@ curl --location --request POST 'http://localhost:8080/api/scim/v2/Users' \
 --header 'Authorization: Bearer XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX' \
 --data-raw '{
     "userName": "newuser@example.com",
+    "name": "New User",
     "active": true,
     "emails": [
         {
@@ -89,6 +91,14 @@ curl --location --request POST 'http://localhost:8080/api/scim/v2/Users' \
     </tr>
 </table>
 
+#### Notes
+
+- `Authorization` must be a valid SCIM bearer token configured for the account.
+- `emails[0].value` is required.
+- `name` is required and must be a plain string for this v2 endpoint.
+- `profileUrl` is optional.
+- If the account cannot add more users, the endpoint can return `400` with `License Expired.`.
+
 #### Sample response
 200 : User created successfully
 
@@ -99,6 +109,7 @@ curl --location --request POST 'http://localhost:8080/api/scim/v2/Users' \
     ],
     "id": "563505",
     "userName": "newuser@example.com",
+    "displayName": "New User",
     "active": true,
     "emails": [
         {

@@ -105,6 +105,30 @@ This section sets out how DronaHQ may share and/or disclose the Information desc
 - **Law Enforcement, Regulators and to Enforce our Rights**, Prevent Fraud, and for Safety: We may release your Information when we believe it is appropriate to comply with the law, comply with or respond to a valid legal request, enforce our Site policies or our Terms, protect our or others' rights, property, or safety, or to respond to or address any other activity that may expose us, you, or any other of our Authorized Users or Customers to legal or regulatory liability. In particular, we may release your Information to third parties as required to (i) satisfy any applicable law, regulation, subpoena/court order, legal process or other government request, (ii) enforce our Terms, including the investigation of potential violations thereof, (iii) investigate and defend ourselves against any third party claims or allegations, (iv) protect against harm to the rights, property or safety of DronaHQ, its users or the public as required or permitted by law and (v) detect, prevent or otherwise address criminal (including fraud or stalking), security or technical issues.
 - **With Consent**. DronaHQ may share Information with third parties when we have consent to do so. For Services registered to corporate entities, DronaHQ may share Information with consent of the Customer or authorized corporate officer.
 
+## SMS and Mobile Messaging
+
+When you provide your mobile number and consent to receive text
+messages from DronaHQ, we collect your mobile number, your consent
+record (including date, time, and method of consent), and message
+delivery and response data. We use this information solely to send
+and support the messages you opted in to receive.
+
+We do not share, sell, rent, or otherwise provide your mobile phone
+number, SMS opt-in data, or messaging consent to third parties or
+affiliates for marketing or promotional purposes at any time.
+
+All of the above categories exclude text message originator opt-in
+data and consent; this information will not be shared with any third
+parties, including our corporate affiliates.
+
+We share mobile numbers only with the messaging service providers
+required to deliver the messages, and those providers are prohibited
+from using the data for any other purpose.
+
+Message frequency varies. Message and data rates may apply. Reply
+STOP to opt out at any time. Reply HELP for assistance, or contact
+support@dronahq.com.
+
 ## International Data Transfers
 
 Your Personal Data may be transferred by DronaHQ internationally. In line with DronaHQ's obligations, where Personal Data is transferred to countries other than the one in which you reside, DronaHQ will ensure compliance with the requirements of the relevant laws in the respective jurisdiction.

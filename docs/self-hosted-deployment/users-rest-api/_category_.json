@@ -1,0 +1,8 @@
+{
+  "label": "Users REST API",
+  "position": 101,
+  "link": {
+    "type": "generated-index",
+    "description": "Manage the users of your self-hosted DronaHQ account and their group membership from external systems."
+  }
+}

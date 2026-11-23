@@ -7,9 +7,9 @@ import Thumbnail from '@site/src/components/Thumbnail';
 
 # API Keys
 
-API Keys are workspace-level secrets that let external clients call DronaHQ APIs on behalf of your agents. Each key is a `sk_` prefixed token that you scope to one or more agent types and (optionally) to a specific list of agents.
+API Keys are workspace-level secrets that let external clients call DronaHQ APIs on behalf of your agents. Each key is a `sk_` prefixed token. Its **Scopes** decide which APIs it can call, and its **Agent Access** can limit it to a specific list of agents.
 
-A single key can address **Agent**, **Data Agent**, and **Voice Agent** in any combination — pick the minimum set of scopes the integration actually needs.
+A single key can hold any combination of scopes — pick the minimum set the integration actually needs.
 
 
 ## Overview
@@ -37,14 +37,39 @@ When you generate a key:
 - **Required field**.
 
 #### Scopes
-- One or more of **Agent**, **Data Agent**, **Voice Agent**.
-- Scopes are additive — a key with both **Agent** and **Voice Agent** can call both.
+- One or more scopes. Scopes are additive — a key with **Voice agents** and **Calls** can build agents and call with them.
+- **Agent** and **Data Agent** call those agent types.
+- Each of the APIs below has one scope, and it gives the key both read and write access to that API:
+
+| Scope | What the key can do |
+|---|---|
+| **Voice agents** | Create, read, update and delete voice agents with the [Voice Agents API](/agents/voice-agent/api/voice-agents), and list the LLM models and voices they can use |
+| **Calls** | Place calls with [Outbound Call Dispatch](/agents/voice-agent/api/dispatch), and read them with the [Call Data API](/agents/voice-agent/api/calls) |
+| **Campaigns** | Create, change, control and read campaigns and their attempts with the [Campaign API](/agents/voice-agent/api/campaigns) |
+| **Phone numbers** | Add, read, delete and unlink numbers with the [Phone Numbers API](/agents/voice-agent/api/phone-numbers) |
+| **Knowledge bases** | Create, read and delete knowledge bases, and add or remove their sources, with the [Knowledge Bases API](/agents/developer/knowledge-bases) |
+| **Structured outputs** | Create, read, change, copy, test and delete structured outputs, and read the library, with the [Structured Outputs API](/agents/developer/structured-outputs) |
+| **Voice providers** | Read the voice and transcriber providers and their models, and save, switch or delete the workspace's own key for each, with the [Voice Providers API](/agents/voice-agent/api/voice-providers) |
+
+- A scope reaches only its own API. **Calls** gives nothing on campaigns or voice agents, for example.
+- In API responses and error messages, a scope is named by its ID and the access a route needs: `calls:read` for a `GET`, `calls:write` for the rest. The **Calls** scope gives both.
 - Pick the minimum set required by the integration. If the key leaks, a tighter scope limits the blast radius.
 - **Required field**.
 
+:::note Legacy scopes
+Keys created before these scopes may have **Voice Agent** or **Agent Creator**. They keep working:
+
+- **Voice Agent** gives **Calls** and **Campaigns**.
+- **Agent Creator** gives **Voice agents**.
+
+Neither gives **Phone numbers**, **Knowledge bases**, **Structured outputs** or **Voice providers**. A new key can't be given a legacy scope. On an existing key it shows as **Voice Agent (legacy)** or **Agent Creator (legacy)**, and you can remove it when you **Edit** the key, but not add it back.
+:::
+
 #### Agent Access
 - **All Agents** (default) — the key can target every agent under the selected scopes.
-- Or pick a specific subset of agents. The key will be denied access to anything outside that list.
+- Or pick a specific subset of agents. The key will be denied access to anything outside that list. The list must name at least one agent, and it applies to every scope on the key.
+- An agent the key creates with the [Voice Agents API](/agents/voice-agent/api/voice-agents) is added to that key's list, so the key can keep managing what it builds. If the key also has **Calls**, it can place calls with the new agent too.
+- Deleting a voice agent removes it from every key's list. A key whose list ends up empty can't reach any agent, so it is **disabled**. To use it again, **Edit** its Agent Access, then turn **Enabled** back on.
 
 #### Expires
 - **Never** / **30 days** / **90 days** / **1 year** / **Custom date**.
@@ -68,9 +93,15 @@ Treat the secret like a password. Anyone with the full `sk_...` value can call y
 
 ## Using the API Key
 
-Include the key in every request using the **`api-key`** header — **not** `Authorization: Bearer`.
+Include the key in every request, in either of these headers. They work the same; if a request sends both, the `api-key` header is used.
 
 **Header format:**
+
+```
+Authorization: Bearer sk_<your-secret>
+```
+
+or
 
 ```
 api-key: sk_<your-secret>
@@ -91,6 +122,18 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
 If the request goes through a reverse proxy, the backend honors `x-forwarded-for` so the original caller IP appears in [Request Logs](/agents/developer/request-logs).
 
 
+## Auth errors
+
+Every API that takes a key answers an auth failure the same way:
+
+| HTTP status | Meaning |
+|---|---|
+| `401` | The key is missing, unknown, disabled or expired |
+| `403` | The key is valid, but it lacks the scope the API needs, or the agent isn't on its **Agent Access** list |
+
+`detail` is a message string, such as `"This API key is disabled."`. A request whose key is missing or unknown can't be tied to your workspace, so it doesn't appear in [Request Logs](/agents/developer/request-logs).
+
+
 ## Managing keys
 
 The **API Keys** list shows the following columns:
@@ -99,11 +142,13 @@ The **API Keys** list shows the following columns:
 |---|---|
 | **Name** | The label you set at creation |
 | **Key Preview** | Last 4 characters of the secret (the full value is never shown again) |
-| **Scopes** | The agent types this key can address |
+| **Scopes** | The scopes on the key, for example **Calls** |
 | **Agent Access** | **All Agents**, or the count of allowlisted agents |
 | **Expires** | Expiry date, or **Never** |
-| **Last Used** | Timestamp of the most recent successful auth |
+| **Last Used** | Timestamp of the most recent successful auth (see below) |
 | **Enabled** | Toggle — controls whether the key authenticates |
+
+**Last Used** moves on every request where the key is valid and has the scope the API needs, even if the request then fails, for example with a `403` because the agent isn't on its **Agent Access** list, or with a `422`. It doesn't move on a `401`, or when the key lacks the scope the API needs.
 
 Available operations:
 

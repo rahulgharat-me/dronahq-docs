@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 2
 title: "Overview"
 pagination_prev: null
 ---
@@ -121,3 +121,23 @@ Each category can be toggled on/off to isolate its contribution, and costs can b
 - Review calls with **FAILED** status and a `no-answer` end reason to identify contacts that may need a retry or a different calling window.
 - Spot-check transcripts and recordings on `agent-ended-call` outcomes to confirm the agent is completing conversations as expected.
 - Track **Credits** per call alongside duration to understand cost efficiency across a campaign.
+
+## Reading these numbers from the API
+
+The same summary metrics are available programmatically from `GET /voice/campaigns/{campaign_uuid}` — see the [Campaign API](/agents/voice-agent/api/campaigns#get-a-campaign).
+
+Two things to know before you build on that response:
+
+- **Counts keep moving after a campaign is stopped or paused.** Calls already connected run to their natural end and still record their outcomes, so the totals settle for a few minutes after the status changes. A campaign is not necessarily finished the moment it stops being `running`.
+- **`call_registry` holds one record per call ATTEMPT, not one per contact.** A contact that was retried appears once per retry. Group by `contact_index` to get back to one row per person.
+
+The call log table and the call detail tabs above are available too:
+
+- `GET /voice/campaigns/{campaign_uuid}/attempts` — [List attempts](/agents/voice-agent/api/campaigns#list-attempts): every row of the call log, paged, plus the contacts that were never dialed and why.
+- `GET /voice/calls/{call_id}` and one endpoint per tab — the [Call Data API](/agents/voice-agent/api/calls): the transcript, logs, structured outputs, messages, latency, cost, and the recording file itself.
+
+## What's Next
+
+- [Campaign Quickstart](/agents/voice-agent/campaigns/quickstart) — create, schedule, and launch a campaign
+- [Campaign API](/agents/voice-agent/api/campaigns) — create and control campaigns from your own systems
+- [Call Data API](/agents/voice-agent/api/calls) — read transcripts, structured output, cost, and recordings programmatically
