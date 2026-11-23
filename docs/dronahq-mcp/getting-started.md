@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem';
 
 DronaHQ MCP connects your DronaHQ workspace to an AI client such as Claude Code, Claude, Cursor, VS Code or Windsurf, over the Model Context Protocol (MCP). Your AI client gets more than a place to write frontend code. It gets a production backend it can build and ship on: authentication, role-based access control (RBAC), a secrets vault, database and API connectors, environments, hosting and audit logging.
 
-There's no server to stand up, no CI/CD pipeline to configure, no SSL certificate to manage and no middleware to write. Building through MCP uses your own AI client, so it doesn't use DronaHQ AI credits.
+There's no server to stand up, no CI/CD pipeline to configure, no SSL certificate to manage and no middleware to write. Building through MCP uses your own AI client, so it doesn't use DronaHQ AI credits. Writing and saving app files does count as Vibe tasks toward your plan's usage. See [Usage](./building-apps.md#usage).
 
 <figure>
   <VideoEmbed host='youtube' videoId='21eyFKVqlPE' />
@@ -61,7 +61,7 @@ DronaHQ MCP is for the people who build in your workspace:
 | Role | Can connect | Notes |
 | --- | --- | --- |
 | Workspace owner | Yes | Full access to every app and connector |
-| Admin | Yes | Full access to every app and connector. Manages users, groups, catalogues, connector access and MCP settings |
+| Admin | Yes | Full access to every app and connector. Manages users, groups, catalogue groups, connector access and MCP settings. Creating a catalogue needs an owner or super admin |
 | Creator | Yes | Works with the apps and connectors they've been given access to |
 | End user | No | End users use published apps. They can't connect an AI client. Ask an admin to make you a creator |
 
@@ -102,7 +102,7 @@ Each workspace needs at least one MCP server. It's the address your AI clients c
 * If **Your MCP servers** already lists a server, select it.
 * If not, fill in **Create MCP server** and click **Create server**. The defaults (**DronaHQ MCP**, "Tools to create and manage apps via DronaHQ MCP") are fine.
 
-You can also skip this step. If you sign in through the workspace-wide URL (see [Use one URL for every workspace](#use-one-url-for-every-workspace)) and your workspace has no server yet, DronaHQ creates one for you when you allow access.
+You can skip this step only if you connect with the workspace-wide URL and sign in (see [Use one URL for every workspace](#use-one-url-for-every-workspace)). If your workspace has no server yet, DronaHQ creates one for you when you allow access. The client tabs in Step 3, and access tokens, need a server, so don't skip this step if you plan to use them.
 
 <figure>
   <Thumbnail src="/img/dronahq-mcp/drawer-servers.png" alt="Your MCP servers in the Connect DronaHQ MCP drawer" />
@@ -111,7 +111,7 @@ You can also skip this step. If you sign in through the workspace-wide URL (see 
 
 ### Step 3: Add the server to your AI client
 
-Pick your client's tab in the drawer and follow the steps. The drawer fills in your server URL for you.
+Pick your client's tab in the drawer and follow the steps. The drawer fills in the URL of the server you selected in Step 2. If you skipped Step 2, use the [workspace-wide URL](#use-one-url-for-every-workspace) instead and sign in.
 
 :::tip Sign-in or access token?
 For Cursor, Claude Code, VS Code and Windsurf, the drawer includes an **access token** in the setup by default, so the client connects without a sign-in step. Claude and other clients always sign in with your DronaHQ account. If your admin has turned access tokens off, every client signs in. See [Sign-in and access tokens](./sign-in-and-access-tokens.md) for the differences.

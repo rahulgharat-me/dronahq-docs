@@ -14,7 +14,7 @@ title: "Troubleshooting"
 | "You can't use DronaHQ MCP here" | Your account is an end user. Ask an admin to make you a creator |
 | "Switch workspace to continue" | You're signed in to another workspace. Click **Sign in to {workspace}** |
 | "This sign-in request expired" | Start connecting again from your client |
-| "Pasted access tokens are turned off for this workspace" | Your admin requires sign-in. Remove the token from your client's config and connect with the server URL. See [Sign-in and access tokens](./sign-in-and-access-tokens.md) |
+| "Pasted access tokens are turned off for this workspace" (from your client), or "Access tokens are turned off for this workspace" (in the drawer) | Your admin requires sign-in. Remove the token from your client's config and connect with the server URL. See [Sign-in and access tokens](./sign-in-and-access-tokens.md) |
 | My client stopped working for everyone at once | An admin may have rotated the org secret. Sign in again, or copy the new setup from the drawer |
 | "Permission denied: user account is deactivated" | Your account was deactivated. Ask an admin to reactivate it |
 

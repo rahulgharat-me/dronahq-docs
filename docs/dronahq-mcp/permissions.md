@@ -13,7 +13,7 @@ Your AI client acts as you. Every tool call is checked against your current role
 | Role | Through MCP |
 | --- | --- |
 | **Owner** | Full access to every app and connector. Can do everything below |
-| **Admin** | Full access to every app and connector. Manages users, groups, catalogues and connector access, and MCP settings. Limited admins manage only the groups and catalogues assigned to them |
+| **Admin** | Full access to every app and connector. Manages users, groups, catalogue groups and connector access, and MCP settings. Creating a catalogue needs an owner or super admin. Limited admins manage only the groups and catalogues assigned to them |
 | **Creator** | Creates apps and automations. Works with the apps and connectors they've been granted |
 | **End user** | Can't connect |
 

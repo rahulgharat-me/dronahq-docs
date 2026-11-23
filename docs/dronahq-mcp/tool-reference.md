@@ -60,7 +60,7 @@ Owners and admins have Owner access to every app and connector, so the app and c
 | --- | --- | --- | --- |
 | `vibe_check_in` | Saves a version snapshot without publishing | No | Editor on the app |
 | `vibe_publish` | Publishes a new version | No | Publisher on the app |
-| `vibe_set_access` | Sets whether the public link needs sign-in | No | Publisher on the app |
+| `vibe_set_access` | Sets whether the public link needs sign-in | No | Publisher on the app, and the secure embed licence |
 | `vibe_get_app_permissions` | Shows who has access to an app | Yes | Owner on the app |
 | `vibe_set_app_permissions` | Replaces who has access to an app | No | Owner on the app |
 

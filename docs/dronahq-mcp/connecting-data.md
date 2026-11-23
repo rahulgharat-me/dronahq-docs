@@ -45,10 +45,10 @@ To use a connector, you need at least **Use Only** access to it. See [Permission
 | Tool | Use it for |
 | --- | --- |
 | `vibe_get_db_schema` | Inspect tables and columns |
-| `vibe_run_db_query` | **Read-only** SQL: a single `SELECT`, `WITH`, `SHOW`, `DESCRIBE` or `EXPLAIN` statement, or a batch of them |
+| `vibe_run_db_query` | **Read-only** SQL: one `SELECT`, `WITH`, `SHOW`, `DESCRIBE` or `EXPLAIN` statement per query. You can send a batch of separate queries in one call |
 | `vibe_run_db_write` | Changes: `CREATE`, `ALTER`, `INSERT`, `UPDATE`, `DELETE`, and actions on NoSQL connectors |
 
-`vibe_run_db_query` refuses anything that changes data. It also refuses multiple statements in one query. `vibe_run_db_write` refuses read-only statements. Both tools need **Use Only** access to the connector.
+`vibe_run_db_query` refuses anything that changes data. It also refuses a query that joins several statements with semicolons, such as `SELECT 1; SELECT 2`. Send them as separate queries in a batch instead. `vibe_run_db_write` refuses read-only statements. Both tools need **Use Only** access to the connector.
 
 :::caution Review changes before you approve them
 `vibe_run_db_write` runs against your real database. Approve schema changes and bulk updates only after reading what the agent proposes.
