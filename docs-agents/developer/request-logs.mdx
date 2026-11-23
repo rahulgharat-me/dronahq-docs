@@ -62,11 +62,11 @@ When a request fails, the Status column shows the HTTP code and an **error code*
 
 | Error code | Meaning | Fix |
 |---|---|---|
-| `missing_token` | No `api-key` header was sent on the request | Add the header — `api-key: sk_<your-secret>` |
+| `missing_token` | No key was sent on the request | Add the header — `Authorization: Bearer sk_<your-secret>` or `api-key: sk_<your-secret>` |
 | `invalid_token` | The header is present but the secret doesn't match any key | Re-check the value; the key may have been deleted, or you copied a stray space |
 | `disabled` | The key has been disabled in the UI | Toggle it back on, or use a different key |
 | `expired` | The key passed its **Expires** date | Create a new key with a future expiry and switch traffic over |
-| `scope_denied` | The key doesn't have the scope for the agent type being called (Agent / Data Agent / Voice Agent) | Edit the key and add the missing scope |
+| `scope_denied` | The key doesn't have the scope the API needs, for example **Calls** to dispatch a call, or **Agent** to call an agent | Edit the key and add the missing scope — see [API Keys](/agents/developer/api-keys#scopes) |
 | `agent_denied` | The key's **Agent Access** doesn't include the target agent | Add the agent to the key's allowlist, or set **Agent Access** to **All Agents** |
 
 

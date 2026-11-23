@@ -31,15 +31,21 @@ Every endpoint is a `GET`. Nothing here creates, changes, or deletes anything, s
 
 ## Prerequisites
 
-- An [API Key](/agents/developer/api-keys) with the **Voice Agent** scope. If the key uses a specific **Agent Access** list, only calls handled by agents on that list are visible — the [list](#list-calls) is narrowed to them automatically, and a per-call request for any other agent's call fails with `403`.
+- An [API Key](/agents/developer/api-keys) with the **Calls** scope, or the older **Voice Agent** scope. If the key uses a specific **Agent Access** list, only calls handled by agents on that list are visible — the [list](#list-calls) is narrowed to them automatically, and a per-call request for any other agent's call fails with `403`.
 - A `call_id`, for the per-call endpoints. It comes from [List calls](#list-calls), from [List attempts](/agents/voice-agent/api/campaigns#list-attempts) for a campaign, or from the `call_data.call_id` field of the [Post-Webhook](/agents/voice-agent/webhook) payload.
 
 ## Authentication
 
-Every request must include the **`api-key`** header — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens.
+Every request must include your key, in the **`api-key`** header or as a Bearer token — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens. The examples on this page use `api-key`.
 
 ```
 api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
 ```
 
 Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), refused ones included, with a matching error code. A request with no key or an unknown key can't be tied to your workspace, so it isn't.
@@ -68,7 +74,7 @@ Browsers cannot call these endpoints directly: the `api-key` header is not on th
 
 The per-call endpoints map one-to-one onto the tabs of the call detail in the product, and [Get a call](#get-a-call) returns all of them together. Both are produced by the same code, so a field has the same shape whichever way you fetch it.
 
-For campaigns there is one more read endpoint, documented with the rest of the [Campaign API](/agents/voice-agent/api/campaigns): `GET /voice/campaigns/{campaign_uuid}/attempts`, the campaign's own dial registry.
+For campaigns there is one more read endpoint, documented with the rest of the [Campaign API](/agents/voice-agent/api/campaigns): `GET /voice/campaigns/{campaign_uuid}/attempts`, the campaign's own dial registry. It needs the **Campaigns** scope, not **Calls**.
 
 ## Retention
 

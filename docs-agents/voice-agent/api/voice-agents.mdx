@@ -11,22 +11,30 @@ The Voice Agents API creates, reads, updates and deletes **voice agents** from y
 
 - Create an agent for each of your customers from your own product.
 - Keep an agent's instructions and tools in sync with your system.
+- Set the values its `{{variable.NAME}}` placeholders fill in, such as a store name or an API key.
 - Copy a tool from one agent to another.
 - Delete agents you no longer need.
 
 ## Prerequisites
 
-- An [API Key](/agents/developer/api-keys) with the **Agent Creator** scope. The **Voice Agent** scope doesn't give access to this API, and **Agent Creator** gives no access to calls, dispatch or campaigns. A key that does both needs both scopes.
+- An [API Key](/agents/developer/api-keys) with the **Voice agents** scope, or the older **Agent Creator** scope.
+- The **Voice agents** scope gives no access to calls, dispatch or campaigns, and the **Calls** and **Campaigns** scopes give no access to this API. A key that builds agents and also calls them needs both, for example **Voice agents** and **Calls**.
 - The key's **Agent Access** sets which agents it can read, change and delete:
   - **All Agents:** every voice agent in the workspace.
   - **Specific agents:** only the agents on the list. [List agents](#list-agents) leaves the others out, and a request for one of them fails with `403`. An agent the key **creates** is added to its list, so the key can keep managing what it builds.
 
 ## Authentication
 
-Every request must include the **`api-key`** header. See [API Keys](/agents/developer/api-keys) for how to create one.
+Every request must include your key, in the **`api-key`** header or as a Bearer token. See [API Keys](/agents/developer/api-keys) for how to create one. The examples on this page use `api-key`.
 
 ```
 api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
 ```
 
 Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), including the failures.
@@ -36,7 +44,7 @@ These endpoints are served at the **root** of your DronaHQ host: `https://<your-
 :::
 
 :::warning Responses contain your secrets
-An agent is returned as stored, including the secrets you put in it, such as a fixed `x-api-key` header on a tool or a webhook's auth token. Call this API from your backend, and don't log full responses.
+An agent is returned as stored, including the secrets you put in it, such as a fixed `x-api-key` header on a tool. The exceptions: webhook auth tokens come back as `<redacted>`, and [variables](#variables) masked. Call this API from your backend, and don't log full responses.
 :::
 
 ## Endpoints
@@ -48,6 +56,11 @@ An agent is returned as stored, including the secrets you put in it, such as a f
 | `POST` | `/voice/agents` | [Create an agent](#create-an-agent) |
 | `PATCH` | `/voice/agents/{agent_uuid}` | [Update an agent](#update-an-agent) |
 | `DELETE` | `/voice/agents/{agent_uuid}` | [Delete an agent](#delete-an-agent) |
+| `GET` | `/voice/agents/{agent_uuid}/variables` | [List variables](#list-variables) |
+| `PUT` | `/voice/agents/{agent_uuid}/variables/{name}` | [Set a variable](#set-a-variable) |
+| `DELETE` | `/voice/agents/{agent_uuid}/variables/{name}` | [Delete a variable](#delete-a-variable) |
+| `GET` | `/voice/llm_models` | [List LLM models](#list-llm-models) for `config.llm` |
+| `GET` | `/voice/voices` | [List voices](#list-voices) for `config.voice_config.voiceId` |
 
 `agent_uuid` is the id other APIs call `agent_id`, for example [dispatch](/agents/voice-agent/api/dispatch).
 
@@ -141,6 +154,9 @@ curl https://<your-dronahq-host>/voice/agents/3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b
     "tools": [
       { "id": "f4513ecc-50e6-41c5-8961-27e5ece2824c", "name": "get_order_status", "tool_type": "http", "…": "…" }
     ],
+    "variables": [
+      { "name": "store_name", "value": "Ac***re", "created_at": "2026-11-10T09:12:44.120394+00:00", "updated_at": "2026-11-10T09:12:44.120394+00:00" }
+    ],
     "config": {
       "llm": { "provider": "…", "model": "…", "temperature": 0.7, "…": "…" },
       "voice_config": { "…": "…" },
@@ -166,6 +182,7 @@ curl https://<your-dronahq-host>/voice/agents/3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b
 | `created_by`, `updated_by`, `last_published_by` | Who created the agent, who last changed it and who last published it (`null` if no one has). A change made through this API reads `api-key:<key name>`. A change made in the builder shows the person's email |
 | `created_at`, `updated_at`, `last_published_at` | ISO 8601 in UTC, with a `+00:00` offset |
 | `instructions` | The system prompt. The same value as `config.llm.system_instructions` |
+| `variables` | The agent's [variables](#variables), oldest first, with masked values |
 | `tools` | Each tool exactly as stored. You can send one back to the API, for example to [copy it to another agent](#copy-a-tool-from-another-agent) |
 | `config` | Every other setting, as the builder shows it: a setting the agent has never had a value for reads as its default. See [Config](#config) |
 
@@ -226,6 +243,7 @@ Every field is optional. What you leave out takes the platform default.
 | `instructions` | string | No | The system prompt. Default: the platform's prompt. If you also send `config.llm.system_instructions`, `instructions` wins |
 | `tools` | array | No | Tools to create. See [Tools](#tools) |
 | `config` | object | No | Any other setting, deep-merged onto the defaults. See [Config](#config) |
+| `variables` | object | No | `{name: value}`: the values `{{variable.NAME}}` fills in. See [Variables](#variables) |
 | `publish` | boolean | No | `true` publishes the agent once it is created. Default `false` |
 
 An unknown top-level field is **rejected** with `422`, so a misspelt field fails loudly.
@@ -265,11 +283,44 @@ curl -X POST https://<your-dronahq-host>/voice/agents \
   "status": "success",
   "agent": { "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a", "name": "Order Helper", "…": "…" },
   "tools": { "added": ["get_order_status"], "updated": [], "removed": [] },
+  "variables": { "added": [], "updated": [], "removed": [] },
   "publish": { "published": true, "version": "0.1.0", "…": "…" }
 }
 ```
 
 `agent` has the same shape as [Get an agent](#get-an-agent). Save `agent.agent_uuid`: every later request uses it.
+
+### A short response
+
+The whole agent runs to several kilobytes. Add `?response=summary` to a create or an update to get the agent as [List agents](#list-agents) shows it instead, plus `publish_state`:
+
+```json
+{
+  "status": "success",
+  "agent": {
+    "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a",
+    "name": "Order Helper",
+    "description": "",
+    "published": true,
+    "last_published_version": "0.1.0",
+    "last_published_at": "2026-11-19T10:02:12.318204+00:00",
+    "created_at": "2026-11-19T10:02:11.120394+00:00",
+    "updated_at": "2026-11-19T10:02:11.120394+00:00"
+  },
+  "tools": { "added": ["get_order_status"], "updated": [], "removed": [] },
+  "variables": { "added": [], "updated": [], "removed": [] },
+  "publish": { "published": true, "version": "0.1.0", "…": "…" },
+  "publish_state": "up_to_date"
+}
+```
+
+| `publish_state` | Means |
+|---|---|
+| `not_published` | The agent has never been published |
+| `unpublished_changes` | The draft differs from the published version, which live calls still run |
+| `up_to_date` | Live calls run what the draft holds. Variables aren't compared, so publish after changing them |
+
+`full`, the whole agent, is the default. Any other value is a `422`.
 
 ---
 
@@ -349,9 +400,33 @@ Changes **only what you send**. A field you leave out stays as it is.
 | `tools` | array | Each entry updates its matching tool, or is added. See below |
 | `remove_tools` | array of strings | Tools to delete, by name or `id` |
 | `config` | object | Deep-merged onto the current settings. See [Config](#config) |
+| `variables` | object | Each name is set to its value, and `null` deletes it. Variables you leave out are kept. See [Variables](#variables) |
+| `add_knowledge_bases` | array of strings | Knowledge bases to attach, by name, keeping the others. See [Attach or detach one](#attach-or-detach-one-knowledge-base-or-structured-output) |
+| `remove_knowledge_bases` | array of strings | Knowledge bases to detach, by name |
+| `add_structured_outputs` | array of strings | Structured output ids to link, keeping the others |
+| `remove_structured_outputs` | array of strings | Structured output ids to unlink |
 | `publish` | boolean | `true` publishes the agent after the update |
 
 An unknown top-level field is rejected with `422`. Every update, even an empty one, sets `updated_at` and `updated_by`.
+
+### Attach or detach one knowledge base or structured output
+
+Sending `config.knowledge_base.consumed` or `config.structured_outputs_json` replaces the whole list. To change one entry, use the add and remove fields:
+
+```json
+{
+  "add_knowledge_bases": ["pricing_faq"],
+  "remove_structured_outputs": ["SO-12"]
+}
+```
+
+- Removes run first. Removing one the agent doesn't have is a `422`. Adding one it already has changes nothing.
+- A knowledge base is added by its name from the [Knowledge Bases API](/agents/developer/knowledge-bases), with the settings the builder gives a newly attached one: its embedding model, the default lookup sound and message, and the agent's "run in background" setting. All of an agent's knowledge bases must use the same embedding model. A mix, or a name your workspace doesn't have, is a `422`.
+- A structured output is added by id: one of your workspace's (`SO-…`) or a library entry (`LSO-…`). It goes at the end of the list.
+- A key limited to some agents can't attach a knowledge base or link an output that only other agents use.
+- Don't send both forms for one list in the same request: that is a `422`.
+
+If you send the whole `consumed` list yourself, give each entry its `default_embedding_model` (the `embedding_model` the Knowledge Bases API returns). Without it, every knowledge base search on the agent fails.
 
 ### How tool changes are applied
 
@@ -429,7 +504,7 @@ curl -X PATCH https://<your-dronahq-host>/voice/agents/<target-agent-uuid> \
 - The copy keeps the tool's `id`, as duplicating an agent in the builder does.
 - If the target already has a tool with that `id`, for example because it was duplicated from the source, that tool is updated instead.
 - If the target already has a tool with the same name, the request fails with `422`. Rename the copy by changing its `name` before you send it.
-- Agent variables the tool uses (`{{variable.NAME}}`) belong to each agent. Create them on the target agent too.
+- Agent variables the tool uses (`{{variable.NAME}}`) belong to each agent. [Create them](#variables) on the target agent too.
 
 ### Response — `200 OK`
 
@@ -437,16 +512,103 @@ curl -X PATCH https://<your-dronahq-host>/voice/agents/<target-agent-uuid> \
 {
   "status": "success",
   "agent": { "…": "the whole agent, as in Get an agent" },
+  "changed": ["tools"],
   "tools": { "added": ["cancel_order"], "updated": [], "removed": [] },
+  "variables": { "added": [], "updated": [], "removed": [] },
   "publish": null
 }
+```
+
+`changed` lists what the update actually changed: `name`, `description`, `instructions`, `config.<section>`, `tools`, `variables`. A value the agent already had doesn't count, so `[]` means nothing changed. With `?response=summary`, `agent` is the short one and `publish_state` is added (see [A short response](#a-short-response)).
+
+---
+
+## Variables
+
+An agent's variables are the values `{{variable.NAME}}` fills in. They work in:
+
+- the instructions;
+- the greeting (`runtime_behaviour.firstMessage`);
+- tool URLs and fixed parameter values;
+- the pre-call and post-call webhooks.
+
+A variable gives a placeholder its default value. [Dispatch](/agents/voice-agent/api/dispatch) can override it for the calls it places with `dynamic_variables`, and a [campaign](/agents/voice-agent/api/campaigns) can map a CSV column to it. A placeholder whose variable doesn't exist is left as written.
+
+- **Names** start with a letter or underscore and hold only letters, digits and underscores, up to 200 characters: `customer_name`, `amount_due`. Any other name is a `422`.
+- **Values** are strings. They are stored encrypted. Every read returns them **masked**: the first two and last two characters (`As***ma`), or `****` for four characters or fewer. No request returns a value in full.
+
+:::note Publish after you change a variable
+Variables belong to the **draft**, like every other change. Live calls use the variables of the published version. Dispatch's `dynamic_variables` may only name variables of the version it calls; other names are dropped and listed in `ignored_variables`. The builder's unpublished-changes marker doesn't track variables, so a variable-only change doesn't show there.
+:::
+
+### With the rest of the agent
+
+Send `variables` on [create](#create-an-agent) or [update](#update-an-agent). On an update, each name you send is set, `null` deletes one, and the variables you leave out are kept. They are saved with the rest of the request, so `"publish": true` publishes them too.
+
+```bash
+curl -X PATCH https://<your-dronahq-host>/voice/agents/3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instructions": "You call {{variable.customer_name}} about an unpaid bill of {{variable.amount_due}}.",
+    "variables": { "customer_name": "there", "amount_due": "your balance", "old_promo": null },
+    "publish": true
+  }'
+```
+
+The response's `variables` says what changed: `{"added": [...], "updated": [...], "removed": [...]}`. Setting a variable to the value it already has, or deleting one that doesn't exist, changes nothing and isn't listed.
+
+### List variables
+
+`GET /voice/agents/{agent_uuid}/variables`
+
+```json
+{
+  "status": "success",
+  "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a",
+  "count": 1,
+  "variables": [
+    { "name": "store_name", "value": "Ac***re", "created_at": "2026-11-10T09:12:44.120394+00:00", "updated_at": "2026-11-10T09:12:44.120394+00:00" }
+  ]
+}
+```
+
+### Set a variable
+
+`PUT /voice/agents/{agent_uuid}/variables/{name}` creates the variable, or replaces its value. The body is `{"value": "..."}`; an empty string is a value. It doesn't publish.
+
+```bash
+curl -X PUT https://<your-dronahq-host>/voice/agents/3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a/variables/store_name \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{ "value": "Acme Store, Pune" }'
+```
+
+```json
+{
+  "status": "success",
+  "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a",
+  "variable": { "name": "store_name", "value": "Ac***ne", "created_at": "…", "updated_at": "…" },
+  "created": false,
+  "changed": true
+}
+```
+
+`created` is `true` for a new variable. `changed` is `false` when it already had this value.
+
+### Delete a variable
+
+`DELETE /voice/agents/{agent_uuid}/variables/{name}` deletes it from the draft. A name the agent doesn't have is a `404`. It doesn't publish: live calls keep the published value until you publish again.
+
+```json
+{ "status": "success", "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a", "name": "store_name" }
 ```
 
 ---
 
 ## Config
 
-`config` holds every setting other than the name, description, instructions and tools. It has the same sections as `agent.config` in [Get an agent](#get-an-agent), and it is **deep-merged** onto what the agent already has:
+`config` holds every setting other than the name, description, instructions, tools and variables. It has the same sections as `agent.config` in [Get an agent](#get-an-agent), and it is **deep-merged** onto what the agent already has:
 
 - An object merges key by key, at every depth. Send only the keys you change.
 - Anything else, including an **array**, replaces the old value at that path. Send the whole list.
@@ -467,16 +629,19 @@ This changes the temperature and leaves every other setting as it was.
 | `privacy` | Recording, transcripts and compliance modes |
 | `webhook_settings` | The pre-call and post-call webhooks |
 | `knowledge_base`, `memory`, `avatar` | Set these up in the builder. To reuse a setup, copy the section from an agent in the same workspace |
-| `structured_outputs_json` | What to extract from each call. An array, replaced whole |
+| `structured_outputs_json` | What to extract from each call: an array of `output_id`s from the [Structured Outputs API](/agents/developer/structured-outputs), replaced whole |
 
 The keys in each section are the ones Get an agent returns. To find a key, open an agent set up in the builder and read its config.
 
 | Checked: the request fails with `422` and nothing is saved | Not checked |
 |---|---|
 | The section names | **The keys inside a section.** A misspelt key is saved and has no effect |
-| Each section's type: an object, or an array for `structured_outputs_json` | **The values.** Provider names, model names, voice ids and numbers are saved as sent |
+| Each section's type: an object, or an array for `structured_outputs_json` | **The other values.** Model names, voice ids and numbers are saved as sent |
+| `provider` in `llm`, `voice_config`, `transcriber` and `avatar`: a provider calls can run, in any letter case. The error lists them | |
 | `tools` inside `config`. Use the top-level `tools` and `remove_tools` | |
-| `call` keys other than `conversationSettings`. Phone numbers and inbound data sources are managed in the builder | |
+| `call` keys other than `conversationSettings`. Link phone numbers with [Link a number to an agent](/agents/voice-agent/api/phone-numbers#link-a-number-to-an-agent); the inbound data source is set in the builder | |
+| Each id added to `structured_outputs_json`: one of your workspace's structured outputs or a library entry (`LSO-…`), listed once. A key limited to some agents can't add an output that only other agents use. Ids the agent already has aren't rechecked | |
+| Each knowledge base added to `knowledge_base`, for a key limited to some agents: it can't add one that only other agents use. Knowledge bases the agent already has aren't rechecked | The knowledge base names, for a key with All Agents |
 
 :::tip Check what you changed
 Read the value back with `?query=`, for example `?query=config.llm.temperature`. A misspelt key comes back as a `404` naming the path.
@@ -487,9 +652,95 @@ Some common changes:
 | To | Send in `config` |
 |---|---|
 | Speak a fixed greeting | `{"runtime_behaviour": {"speakingBehaviourType": "custom", "firstMessage": "…"}}`. With the default `dynamic`, the model writes its own greeting and `firstMessage` is not used |
-| Record calls | `{"privacy": {"artifacts": {"recording": {"enabled": true}}}}` |
+| Record calls | `{"privacy": {"artifacts": {"recording": {"enabled": true}}}}`. This turns on `stereo` too, as the builder's "Enable recording" box does: stereo is the only recording mode. Sending `"stereo": false` with it records nothing |
 | Limit calls to 5 minutes | `{"call": {"conversationSettings": {"totalCallTimeout": {"timeoutSeconds": 300}}}}` |
 | Recognise product names | `{"transcriber": {"generation_config": {"keyterm": ["DronaHQ"]}}}` |
+
+### List LLM models
+
+`GET /voice/llm_models`
+
+The language models an agent can use, grouped by provider: the values for `config.llm.provider` and `config.llm.model`, as the builder's model list offers them. Providers that calls can't run aren't listed. The key needs the **Voice agents** scope.
+
+| Query parameter | Description |
+|---|---|
+| `provider` | Only this provider's models, such as `openai`. Aliases such as `gemini` are accepted. A provider that calls can't run returns `422` |
+| `region` | The agent's `privacy.dataResidency.region`: `global` (the default) or `in`. With `in`, providers that don't process data in India show `available: false` |
+
+```json
+{
+  "status": "success",
+  "region": "global",
+  "plan_uses_own_keys": false,
+  "count": 1,
+  "providers": [
+    {
+      "provider": "openai",
+      "name": "OpenAI",
+      "available": true,
+      "unavailable_reason": null,
+      "managed": true,
+      "key_source": "managed",
+      "models": [
+        { "model": "gpt-4o", "description": "…", "context_window": 128000, "max_output_tokens": 16384, "temperature": true, "thinking": false, "intelligence": 9, "latency_ms": 1040 }
+      ]
+    }
+  ]
+}
+```
+
+`key_source` is the key a call on that provider would use right now:
+
+| Value | Meaning |
+|---|---|
+| `workspace` | Your workspace's own key |
+| `managed` | The platform's key |
+| `none` | No key, so the call fails |
+
+`temperature: false` means the model ignores `llm.temperature`.
+
+### List voices
+
+`GET /voice/voices`
+
+The voices for `config.voice_config.voiceId`. These are the shared voice library plus the voices your workspace added, as the builder's voice picker lists them. Cloned voices aren't listed. The key needs the **Voice agents** scope.
+
+| Query parameter | Description |
+|---|---|
+| `provider` | `voice_config.provider`, such as `elevenlabs`. Aliases are accepted. Leave it out to list every provider's voices. A provider that calls can't run returns `422` |
+| `model` | `voice_config.model`. Only voices that work on that model are returned. A voice with no `model` works on every model of its provider, so it is always included |
+| `language` | A language code. `hi` matches `hi` and `hi-IN`; `hi-IN` matches only `hi-IN` |
+| `gender`, `accent` | As the voices list them, such as `female` or `indian`. Not case-sensitive |
+| `search` | Part of the voice's name or `voice_id` |
+| `limit`, `offset` | Paging. `limit` is 1–500 and defaults to 50. Keep paging while `has_more` is `true` |
+
+```json
+{
+  "status": "success",
+  "total": 64,
+  "count": 50,
+  "has_more": true,
+  "voices": [
+    {
+      "voice_id": "aura-2-thalia-en",
+      "name": "Thalia",
+      "provider": "deepgram",
+      "model": "aura-2",
+      "description": "…",
+      "gender": "female",
+      "accent": "american",
+      "age_group": "adult",
+      "languages": ["en-US"],
+      "tags": ["aura-2"],
+      "preview_url": null,
+      "featured": true,
+      "source": "library"
+    }
+  ]
+}
+```
+
+`source` is `library` for a shared voice and `added` for one your workspace added. A voice id belongs to one provider, so set `provider`, `model` and `voiceId` together, from the same voice.
 
 ---
 
@@ -575,7 +826,7 @@ Every error has a `detail` field, but its shape depends on the error:
 | `detail` is | When |
 |---|---|
 | A string, for example `"Voice agent not found."` | `401` and `403` from the key or its Agent Access, and `404` for an agent |
-| An object with a `message` | A bad tool (`detail.tool` names it) or a bad `config` section (`422`), a `query` error (`400` or `404`, with `query` and `at`), the plan's tool limit (`403`, with `upgrade_required`), a refused delete (`409` or `503`), and `500` |
+| An object with a `message` | A bad tool (`detail.tool` names it), a bad `config` section or a `provider` calls can't run (`422`), a `query` error (`400` or `404`, with `query` and `at`), the plan's tool limit (`403`, with `upgrade_required`), a refused delete (`409` or `503`), and `500` |
 | An array of errors | A body or parameter that fails validation (`422`): an unknown top-level field, a wrong type, a `name` over 128 characters, or a `query` over 500 characters |
 
 ```json
@@ -594,11 +845,11 @@ Body validation errors are `422`, never `400`.
 |---|---|---|
 | `400` | A malformed `query` path | Fix the path; `detail.message` says what is wrong |
 | `401` | The key is missing, unknown, disabled or expired | Check the key under **Developer → API Keys**: it must be enabled and not expired |
-| `403` | The key lacks the **Agent Creator** scope, or the agent isn't on its **Agent Access** list | Fix the key's scopes or Agent Access |
+| `403` | The key lacks the **Voice agents** scope, or the agent isn't on its **Agent Access** list | Fix the key's scopes or Agent Access |
 | `403` | The change would exceed your plan's tool limit (`detail.upgrade_required: true`) | Remove tools, or upgrade |
 | `404` | No voice agent with this id in the key's workspace, or a `query` path that matched nothing | Check the id with [List agents](#list-agents). An agent in another workspace is a `404` too |
 | `409` | Delete only: a call or a campaign is in progress on the agent | See [When the delete is refused](#when-the-delete-is-refused) |
-| `422` | The body is invalid: an unknown field, a bad tool or parameter, or a `config` section that isn't allowed | Read `detail` |
+| `422` | The body is invalid: an unknown field, a bad tool or parameter, a `config` section that isn't allowed, or a `provider` calls can't run. On the model and voice lists: a `provider` calls can't run, or an unknown `region` | Read `detail` |
 | `500` | Unexpected server error. Nothing was saved or deleted | Retry; contact support if it persists |
 | `503` | Delete only: calls in progress couldn't be checked. Nothing was deleted | Retry |
 
@@ -606,5 +857,6 @@ Body validation errors are `422`, never `400`.
 
 - [API Keys](/agents/developer/api-keys): scopes, Agent Access, and checking a key
 - [Outbound Call Dispatch](/agents/voice-agent/api/dispatch): place calls with the agents you build
+- [Voice Providers](/agents/voice-agent/api/voice-providers): check that an agent's voice and transcriber providers have a key, and pick their models
 - [Call Data API](/agents/voice-agent/api/calls): read back the calls they handled
 - [Request Logs](/agents/developer/request-logs): see what your integration sent

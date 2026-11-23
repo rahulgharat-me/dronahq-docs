@@ -37,14 +37,21 @@ Rule of thumb: if someone will later ask *"how did that campaign do?"*, use this
 
 - A **published** voice agent. An agent that isn't published fails with `404` and the message `Invalid agent or given agent is not published` — publishing is what creates the snapshot campaigns dial against. A deleted agent fails your key's access check first, with `403 agent_denied`.
 - A phone number registered in your workspace to dial **from**.
-- An [API Key](/agents/developer/api-keys) with the **Voice Agent** scope. If the key uses a specific **Agent Access** list, the campaign's agent must be on it.
+- An [API Key](/agents/developer/api-keys) with the **Campaigns** scope, or the older **Voice Agent** scope. It covers every route on this page, recurring campaigns included.
+- If the key uses a specific **Agent Access** list, the campaign's agent must be on it.
 
 ## Authentication
 
-Every request must include the **`api-key`** header — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens.
+Every request must include your key, in the **`api-key`** header or as a Bearer token — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens. The examples on this page use `api-key`.
 
 ```
 api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
 ```
 
 Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), refused ones included, with a matching error code. A request with no key or an unknown key can't be tied to your workspace, so it isn't.
@@ -137,7 +144,7 @@ Creates a campaign from a CSV of contacts. Launches immediately, or arms a sched
 
 | Header | Required | Description |
 |---|---|---|
-| `api-key` | Yes | Your API key secret (must have **Voice Agent** scope) |
+| `api-key` | Yes | Your API key secret, which must have the **Campaigns** scope. You can send `Authorization: Bearer <key>` instead |
 | `Content-Type` | Yes | `multipart/form-data` |
 | `Idempotency-Key` | No | Strongly recommended — see [Idempotency](#idempotency) |
 

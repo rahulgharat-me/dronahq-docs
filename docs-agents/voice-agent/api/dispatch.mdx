@@ -23,14 +23,20 @@ The Outbound Call Dispatch API queues one or more outbound calls from a voice ag
 
 - A voice agent. Calls run its **published** version; to call with unpublished changes, send `"agent_version": "draft"` — see [Calling with the draft](#calling-with-the-draft).
 - A number to call from: the outbound **FROM number** of the version you call (**Call Configuration → Outbound Settings**), or any active number in your workspace, sent as `source_phone_number`.
-- An [API Key](/agents/developer/api-keys) with the **Voice Agent** scope. If the key uses a specific **Agent Access** list, the target `agent_id` must be on that list.
+- An [API Key](/agents/developer/api-keys) with the **Calls** scope, or the older **Voice Agent** scope. If the key uses a specific **Agent Access** list, the target `agent_id` must be on that list.
 
 ## Authentication
 
-Every request must include the **`api-key`** header — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens.
+Every request must include your key, in the **`api-key`** header or as a Bearer token — see [API Keys](/agents/developer/api-keys) for how to generate and manage tokens. The examples on this page use `api-key`.
 
 ```
 api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
 ```
 
 A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fails with `401`/`403`. Requests made with one of your keys, refused ones included, are recorded in [Request Logs](/agents/developer/request-logs) with a matching error code. A request with no key or an unknown key can't be tied to your workspace, so it isn't.
@@ -44,7 +50,7 @@ A missing, invalid, disabled, expired, scope-mismatched, or agent-denied key fai
 
 | Header | Required | Description |
 |---|---|---|
-| `api-key` | Yes | Your API key secret (must have **Voice Agent** scope) |
+| `api-key` | Yes | Your API key secret, which must have the **Calls** scope. You can send `Authorization: Bearer <key>` instead |
 | `Content-Type` | Yes | `application/json` |
 | `Idempotency-Key` | No | Any string up to 255 characters. Re-sending a key returns the original batch instead of creating a new one — see [Idempotency](#idempotency). |
 
@@ -227,7 +233,7 @@ curl -X POST https://<your-dronahq-host>/voice/outbound/dispatch \
 
 Reference a variable in the agent’s instructions, greeting, or tool parameters with the standard notation: `{{variable.<name>}}`.
 
-When a key matches a variable already defined in the agent’s Variables section, the value you send overrides the saved value for these calls. See [Variables](/agents/getting-started/variables) for how to define variables.
+When a key matches a variable already defined in the agent’s Variables section, the value you send overrides the saved value for these calls. See [Variables](/agents/getting-started/variables) for how to define variables in the builder, or define them through the [Voice Agents API](/agents/voice-agent/api/voice-agents#variables). Publish the agent after you add one: a dispatch checks names against the version it calls.
 
 | Field | Type | Description |
 |---|---|---|
@@ -287,7 +293,7 @@ Returns the current state of every call in the batch.
 
 | Header | Required | Description |
 |---|---|---|
-| `api-key` | Yes | Same key requirements as create — must have **Voice Agent** scope and access to the batch's `agent_id` |
+| `api-key` | Yes | Your API key secret, which must have the **Calls** scope and access to the batch's `agent_id`. You can send `Authorization: Bearer <key>` instead |
 
 ### Example response — `200 OK`
 
