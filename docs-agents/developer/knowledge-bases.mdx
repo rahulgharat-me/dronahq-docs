@@ -1,0 +1,581 @@
+---
+sidebar_position: 4
+title: "Knowledge Bases"
+---
+
+# Knowledge Bases API
+
+The Knowledge Bases API lists, creates and deletes the **knowledge bases** in your workspace, and adds or removes their **text**, **Q&A** and **file** sources, from your own system. It does what the **Knowledge Base** screen does: a knowledge base or source you add here appears there, and the other way round.
+
+Knowledge bases belong to the workspace and are used by chat agents and voice agents alike, so this API is not under `/voice`.
+
+## When to Use This
+
+- Keep an agent's knowledge in step with your own content: push an FAQ, a policy page or a product sheet whenever it changes.
+- Upload documents from your system without opening DronaHQ, and check when they are ready.
+- Create a knowledge base per customer or product line, and delete it when you're done.
+
+This API doesn't cover everything the screen does:
+
+- **Website** and **Google Drive** sources can't be added or removed. They still show in [List sources](#list-sources).
+- A knowledge base can't be renamed or changed once it is created.
+- Knowledge bases are attached to agents in the builder, in the agent's **Knowledge Base** section. This API doesn't attach or detach them. The [Voice Agents API](/agents/voice-agent/api/voice-agents) can copy a voice agent's `knowledge_base` section from another agent in the same workspace.
+
+## Prerequisites
+
+- An [API Key](/agents/developer/api-keys) with the **Knowledge bases** scope.
+- The older **Voice Agent** and **Agent Creator** scopes don't give access to this API. To use an older key, edit it under **Developer → API Keys** and add the **Knowledge bases** scope.
+- The key's **Agent Access** decides which knowledge bases it reaches. See [Keys limited to some agents](#keys-limited-to-some-agents).
+
+## Authentication
+
+Every request must include your key, in the **`api-key`** header or as a Bearer token. See [API Keys](/agents/developer/api-keys) for how to create one. The examples on this page use `api-key`.
+
+```
+api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
+```
+
+Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), including the failures.
+
+:::note Base path
+These endpoints are served at the **root** of your DronaHQ host: `https://<your-dronahq-host>/knowledge_bases`. There is no `/api/v1` prefix, and the path uses an underscore.
+:::
+
+## Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/knowledge_bases` | [List knowledge bases](#list-knowledge-bases) |
+| `GET` | `/knowledge_bases/{name}` | [Get a knowledge base](#get-a-knowledge-base) |
+| `GET` | `/knowledge_bases/embedding_models` | [List embedding models](#list-embedding-models) |
+| `POST` | `/knowledge_bases` | [Create a knowledge base](#create-a-knowledge-base) |
+| `DELETE` | `/knowledge_bases/{name}` | [Delete a knowledge base](#delete-a-knowledge-base) |
+| `GET` | `/knowledge_bases/{name}/sources` | [List sources](#list-sources) |
+| `POST` | `/knowledge_bases/{name}/sources/text` | [Add a text source](#add-a-text-source) |
+| `POST` | `/knowledge_bases/{name}/sources/qa` | [Add a Q&A source](#add-a-qa-source) |
+| `POST` | `/knowledge_bases/{name}/sources/files` | [Upload files](#upload-files) |
+| `DELETE` | `/knowledge_bases/{name}/sources/text/{title}` | [Delete a source](#delete-a-source) |
+| `DELETE` | `/knowledge_bases/{name}/sources/qa/{title}` | [Delete a source](#delete-a-source) |
+| `DELETE` | `/knowledge_bases/{name}/sources/files/{file_name}` | [Delete a source](#delete-a-source) |
+
+A knowledge base is identified by its **name**, which you choose when you create it:
+
+- Letters, numbers, underscores (`_`) and dashes (`-`) only, up to 255 characters. Names are case-sensitive.
+- The name is the knowledge base's id, and agents attach it by name, so it can't be changed.
+- `embedding_models` is reserved.
+
+## Keys limited to some agents
+
+A knowledge base belongs to the workspace, not to one agent, so a key set to **All Agents** reaches every knowledge base. A key limited to **specific agents** reaches what its agents use:
+
+| The key | Which knowledge bases |
+|---|---|
+| Sees, and adds or removes sources in | Knowledge bases attached to one of its agents, and knowledge bases attached to no agent. One attached only to other agents is left out of the list, and a request for it fails with `403` |
+| Creates | Any knowledge base. A new one is attached to no agent |
+| Deletes | A knowledge base whose agents are all on its list. Otherwise it's a `403`, because deleting it would take it away from them |
+
+Every agent that uses a knowledge base counts, chat or voice, whether it's attached in the agent's draft or in its published version.
+
+The same key can't widen this through the [Voice Agents API](/agents/voice-agent/api/voice-agents) either: attaching a knowledge base that only other agents use to one of its own agents is refused with `422`.
+
+---
+
+## List knowledge bases
+
+`GET /knowledge_bases`
+
+Returns the knowledge bases the key can see.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | `100` | How many to return, from 1 to 1000 |
+| `offset` | integer | `0` | How many to skip |
+
+```bash
+curl "https://<your-dronahq-host>/knowledge_bases?limit=20" \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "total_count": 2,
+  "limit": 20,
+  "offset": 0,
+  "knowledge_bases": [
+    {
+      "name": "support_faq",
+      "embedding_model": "text-embedding-3-small",
+      "source_count": 12,
+      "size": 48213,
+      "created_at": "2026-11-03T09:14:52.481207+00:00",
+      "updated_at": "2026-11-16T17:02:11.904532+00:00"
+    },
+    {
+      "name": "pricing-2026",
+      "embedding_model": "text-embedding-3-small",
+      "source_count": 0,
+      "size": 0,
+      "created_at": "2026-11-17T08:40:03.119845+00:00",
+      "updated_at": "2026-11-17T08:40:03.119845+00:00"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `total_count` | How many knowledge bases the key can see, across all pages |
+| `name` | The knowledge base's name, which is also its id |
+| `embedding_model` | The model every source in it is embedded with |
+| `source_count` | How many sources it holds |
+| `size` | The size of its stored content, the figure the **Knowledge Base** screen shows |
+| `created_at`, `updated_at` | When it was created and last changed, in UTC |
+
+`source_count` and `size` are recounted just after a source is added or removed, so they can lag a request by a moment.
+
+---
+
+## Get a knowledge base
+
+`GET /knowledge_bases/{name}`
+
+Returns one knowledge base, in the same shape as an item of [List knowledge bases](#list-knowledge-bases).
+
+```bash
+curl https://<your-dronahq-host>/knowledge_bases/support_faq \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "knowledge_base": {
+    "name": "support_faq",
+    "embedding_model": "text-embedding-3-small",
+    "source_count": 12,
+    "size": 48213,
+    "created_at": "2026-11-03T09:14:52.481207+00:00",
+    "updated_at": "2026-11-16T17:02:11.904532+00:00"
+  }
+}
+```
+
+A name that isn't a knowledge base in the key's workspace is a `404`, and so is a name with characters a knowledge base name can't have.
+
+---
+
+## List embedding models
+
+`GET /knowledge_bases/embedding_models`
+
+Returns the models a knowledge base can be embedded with. Use a `model` as `embedding_model` when you [create a knowledge base](#create-a-knowledge-base). `default_model` is the one used when you leave `embedding_model` out.
+
+```bash
+curl https://<your-dronahq-host>/knowledge_bases/embedding_models \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "default_model": "text-embedding-3-small",
+  "models": [
+    {
+      "model": "text-embedding-3-small",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "description": "…",
+      "available": true
+    },
+    {
+      "model": "text-embedding-3-large",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "description": "…",
+      "available": true
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `model` | The model's name, as `embedding_model` takes it |
+| `provider`, `provider_display_name` | The AI provider that runs it |
+| `description` | A short description |
+| `available` | `false` when the provider is listed as coming soon |
+
+---
+
+## Create a knowledge base
+
+`POST /knowledge_bases`
+
+Creates an empty knowledge base, as **Create** does in the app. Add sources to it next.
+
+The embedding model is fixed for the knowledge base's life: every source in it is embedded with that model. An agent can only use knowledge bases that share one embedding model.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | The knowledge base's name and id. See [the name rules](#endpoints) |
+| `embedding_model` | string | No | A `model` from [List embedding models](#list-embedding-models). Leave it out for `default_model` |
+
+An unknown field is **rejected** with `422`, so a misspelt field fails loudly.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/knowledge_bases \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "pricing-2026",
+    "embedding_model": "text-embedding-3-small"
+  }'
+```
+
+### Response — `201 Created`
+
+```json
+{
+  "status": "success",
+  "knowledge_base": {
+    "name": "pricing-2026",
+    "embedding_model": "text-embedding-3-small",
+    "source_count": 0,
+    "size": 0,
+    "created_at": "2026-11-17T08:40:03.119845+00:00",
+    "updated_at": "2026-11-17T08:40:03.119845+00:00"
+  }
+}
+```
+
+`knowledge_base` has the same shape as an item of [List knowledge bases](#list-knowledge-bases).
+
+A name that is already taken in your workspace is a `409`, and the existing knowledge base is left as it was. A model that isn't in [List embedding models](#list-embedding-models) is a `400`.
+
+---
+
+## Delete a knowledge base
+
+`DELETE /knowledge_bases/{name}`
+
+Deletes the knowledge base and every source in it **permanently**, as **Delete** does in the app.
+
+- **Detach it first.** Delete doesn't change the agents that use it: they keep naming a knowledge base that no longer exists. Remove it from those agents in the builder.
+
+```bash
+curl -X DELETE https://<your-dronahq-host>/knowledge_bases/pricing-2026 \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "message": "Collection 'pricing-2026' deleted successfully",
+  "name": "pricing-2026"
+}
+```
+
+A second delete of the same knowledge base returns `404`.
+
+---
+
+## List sources
+
+`GET /knowledge_bases/{name}/sources`
+
+Returns the knowledge base's sources, of every type, including website and Google Drive sources added in the app.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `source_type` | string | `all` | Only sources of one type: `file`, `qa`, `text`, `website`, `google_drive`, or `all` |
+| `limit` | integer | `100` | How many to return, 1–1000 |
+| `offset` | integer | `0` | How many to skip |
+
+`total_count` counts every source that matches `source_type`, so keep raising `offset` by `limit` until it reaches `total_count`.
+
+```bash
+curl "https://<your-dronahq-host>/knowledge_bases/support_faq/sources?source_type=file&limit=100&offset=0" \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "knowledge_base": "support_faq",
+  "total_count": 2,
+  "limit": 100,
+  "offset": 0,
+  "sources": [
+    {
+      "type": "file",
+      "name": "returns-policy.pdf",
+      "status": "ready",
+      "size": 18342,
+      "created_at": "2026-11-16T17:01:40.220481+00:00",
+      "updated_at": "2026-11-16T17:02:11.904532+00:00"
+    },
+    {
+      "type": "file",
+      "name": "scan.pdf",
+      "status": "failed",
+      "size": null,
+      "created_at": "2026-11-16T17:05:02.310115+00:00",
+      "updated_at": "2026-11-16T17:05:09.771349+00:00",
+      "error": "…"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `type` | `file`, `qa`, `text`, `website` or `google_drive` |
+| `name` | The file name for a file or Google Drive source, the title for a text or Q&A source, the URL for a website source. This is the name [Delete a source](#delete-a-source) takes |
+| `status` | `processing` while an uploaded file is still being read and embedded, `failed` if that didn't work, and `ready` once the source can be searched |
+| `size` | The size of its stored content. `null` until a file has been processed |
+| `created_at`, `updated_at` | When it was added and last changed, in UTC |
+| `error` | Only when `status` is `failed`: why processing failed |
+| `pages_crawled` | Website sources only: how many pages were crawled |
+
+---
+
+## Add a text source
+
+`POST /knowledge_bases/{name}/sources/text`
+
+Adds a block of text, as **Text** does on the sources screen. The text is split into chunks and embedded before the response, so it can be searched as soon as you get a `201`.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | string | Yes | The source's name, up to 255 characters. It must be unique among the knowledge base's text sources |
+| `text` | string | Yes | The content. Markdown headings (`#`, `##`) are used to split it into chunks |
+| `chunk_size` | integer | No | The most characters in one chunk, from 100 to 8000. Default `2500` |
+| `chunk_overlap` | integer | No | How many characters each chunk repeats from the one before. Must be smaller than `chunk_size`. Default 15% of `chunk_size` |
+
+The title and text together can be up to 5 MB. An unknown field is **rejected** with `422`.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/knowledge_bases/support_faq/sources/text \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Refund policy",
+    "text": "# Refunds\nYou can return any item within 30 days of delivery..."
+  }'
+```
+
+### Response — `201 Created`
+
+```json
+{
+  "status": "success",
+  "knowledge_base": "support_faq",
+  "source": { "type": "text", "name": "Refund policy" }
+}
+```
+
+A title that the knowledge base already has as a text source is a `409`. To replace a text source, [delete it](#delete-a-source) and add it again.
+
+---
+
+## Add a Q&A source
+
+`POST /knowledge_bases/{name}/sources/qa`
+
+Adds one answer and the questions that should find it, as **Q&A** does on the sources screen. It is embedded before the response.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | string | Yes | The source's name, up to 255 characters. It must be unique among the knowledge base's Q&A sources |
+| `questions` | array of strings | Yes | The ways a user might ask, from 1 to 100 |
+| `answer` | string | Yes | The answer |
+| `chunk_size` | integer | No | As for [a text source](#add-a-text-source) |
+| `chunk_overlap` | integer | No | As for [a text source](#add-a-text-source) |
+
+The title, questions and answer together can be up to 5 MB. An unknown field is **rejected** with `422`.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/knowledge_bases/support_faq/sources/qa \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Opening hours",
+    "questions": ["When are you open?", "What are your support hours?"],
+    "answer": "Our support team is available Monday to Friday, 9am to 6pm IST."
+  }'
+```
+
+### Response — `201 Created`
+
+```json
+{
+  "status": "success",
+  "knowledge_base": "support_faq",
+  "source": { "type": "qa", "name": "Opening hours" }
+}
+```
+
+A title that the knowledge base already has as a Q&A source is a `409`.
+
+---
+
+## Upload files
+
+`POST /knowledge_bases/{name}/sources/files`
+
+Uploads files, as **Files** does on the sources screen. The request is `multipart/form-data`.
+
+The files are read and embedded **in the background**. The response is a `202` that lists which files were accepted. Each accepted file shows in [List sources](#list-sources) with `status: "processing"` until it becomes `ready`, or `failed` with an `error`. Poll List sources to know when a file can be searched.
+
+### Form fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file` | file | Yes | A file to upload. Repeat the field for more files, up to 5 per request. Its file name can't contain `/`, `\` or `:` |
+| `chunk_size` | integer | No | As for [a text source](#add-a-text-source) |
+| `chunk_overlap` | integer | No | As for [a text source](#add-a-text-source) |
+| `force_ocr` | boolean | No | `true` runs OCR on every page of a PDF. Slower, but useful when a PDF's text is poor quality |
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/knowledge_bases/support_faq/sources/files \
+  -H "api-key: sk_your-generated-secret-here" \
+  -F "file=@returns-policy.pdf" \
+  -F "file=@shipping.docx" \
+  -F "chunk_size=2000"
+```
+
+### Response — `202 Accepted`
+
+```json
+{
+  "status": "success",
+  "knowledge_base": "support_faq",
+  "accepted": [
+    { "type": "file", "name": "returns-policy.pdf", "status": "processing" }
+  ],
+  "failed": [
+    {
+      "name": "shipping.docx",
+      "error": "File 'shipping.docx' already exists in the collection. Please delete the existing file first or use a different name."
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `accepted` | The files that were queued for processing |
+| `failed` | The files that weren't, each with an `error`. A file with the same name as one already in the knowledge base fails this way; delete the old one first or rename the file |
+
+When no file is accepted, the request fails instead: `409` when every file was already in the knowledge base, `500` otherwise. `detail.failed` lists the files, as above.
+
+A file that is accepted can still fail while it's processed, for example a file type that can't be read. That shows later, in [List sources](#list-sources).
+
+---
+
+## Delete a source
+
+- `DELETE /knowledge_bases/{name}/sources/text/{title}`
+- `DELETE /knowledge_bases/{name}/sources/qa/{title}`
+- `DELETE /knowledge_bases/{name}/sources/files/{file_name}`
+
+Removes a source and everything embedded from it. Use the source's `name` from [List sources](#list-sources), URL-encoded. A title that contains `/` works as it is.
+
+Website and Google Drive sources can't be deleted with this API.
+
+A file can be deleted while it is still `processing`: its processing stops adding to the knowledge base and removes anything it added.
+
+```bash
+curl -X DELETE "https://<your-dronahq-host>/knowledge_bases/support_faq/sources/text/Refund%20policy" \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "message": "Successfully deleted text entry 'Refund policy' (3 entries removed)",
+  "knowledge_base": "support_faq",
+  "source": { "type": "text", "name": "Refund policy" }
+}
+```
+
+A source that isn't in the knowledge base is a `404`.
+
+---
+
+## Errors
+
+### Error shapes
+
+Every error has a `detail` field, but its shape depends on the error:
+
+| `detail` is | When |
+|---|---|
+| A string, for example `"Knowledge base not found."` | `401` and `403` from the key or its Agent Access, `404`, `409` for a taken name or a duplicate text or Q&A source, `400` from the request's content, and `401` / `402` from the credit check |
+| An object with a `message` | `500`, and an upload with no file accepted (`409` or `500`), which also has `failed` |
+| An array of errors | A body or form that fails validation (`422`) |
+
+```json
+{ "detail": "This knowledge base already has a text source named 'Refund policy'. Delete it first or use another name." }
+```
+
+```json
+{ "detail": [ { "type": "extra_forbidden", "loc": ["body", "collectionName"], "msg": "Extra inputs are not permitted", "input": "pricing-2026" } ] }
+```
+
+### Status codes
+
+| HTTP status | Cause | Fix |
+|---|---|---|
+| `400` | Create: the embedding model isn't one of the models. Text and Q&A: the content is over 5 MB or invalid. Upload: more than 5 files. `detail` says which | Fix what the message names |
+| `401` | The key is missing, unknown, disabled or expired | Check the key under **Developer → API Keys**: it must be enabled and not expired |
+| `401`, `402` | Create, add and upload only: your workspace can't use this service, or its credit balance is exhausted. `detail` says which | Check your plan and credit balance |
+| `403` | The key lacks the **Knowledge bases** scope | Add **Knowledge bases** to the key |
+| `403` | The key's **Agent Access** doesn't reach the knowledge base, or the delete would take it from agents outside it | See [Keys limited to some agents](#keys-limited-to-some-agents) |
+| `404` | No knowledge base with this name in the key's workspace, or the name has characters a name can't have. Knowledge bases built by Data Agents aren't reachable through this API and are a `404` too. On a source delete: no such source | Check the name with [List knowledge bases](#list-knowledge-bases) or [List sources](#list-sources) |
+| `409` | Create: the name is taken. Text and Q&A: the title is already used by a source of that type. Upload: every file was already in the knowledge base | Use another name, or delete the existing one first |
+| `422` | The body or form is invalid: an unknown or missing field, a name with other characters or the reserved name `embedding_models`, `chunk_size` outside 100–8000, `chunk_overlap` not smaller than `chunk_size` (2500 when you leave `chunk_size` out), or an uploaded file name with `/`, `\` or `:` | Read `detail` |
+| `500` | Unexpected server error. `detail.message` names the action, for example `Could not add the text source.` | Retry; contact support if it persists |
+
+## What's Next
+
+- [API Keys](/agents/developer/api-keys): scopes and Agent Access
+- [Voice Agents](/agents/voice-agent/api/voice-agents): create and configure the agents that use your knowledge bases
+- [Request Logs](/agents/developer/request-logs): see what your integration sent

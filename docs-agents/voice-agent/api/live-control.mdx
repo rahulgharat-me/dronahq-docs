@@ -1,0 +1,451 @@
+---
+sidebar_position: 4
+title: "Live Call Control"
+---
+
+# Live Call Control
+
+Live call control acts on a call **while it is happening**. You can make the agent say a line, give it a note, mute either side of a web call, hang up, or transfer a phone call to a person. You can also get a listen-only token to hear the call live.
+
+Every request names the call by its `call_id`. There is no API key.
+
+## When to Use This
+
+- Hang up a dispatched or campaign call from your own system.
+- Hand a phone call to a person when your CRM or a supervisor decides to.
+- Tell the agent something it can't know, such as a payment that just cleared.
+- Let a supervisor listen in from your own dashboard.
+
+## Authentication: the `call_id` is the key
+
+:::warning Keep the `call_id` secret
+These endpoints take **no API key**. The 32-character `call_id` is the credential. Anyone who has it can control that call: speak through the agent, end it, transfer it, and listen in. It works on that one call only.
+
+- Call this API from your server. Never send a `call_id` to a browser or a mobile app.
+- Keep it out of logs, analytics, error trackers and any URL you share.
+- The observer token and its `room` contain the `call_id` too. Treat them the same way.
+:::
+
+### Where to get a `call_id`
+
+| Source | Where it is |
+|---|---|
+| [Outbound Call Dispatch](./dispatch.mdx#get-batch-status) status | `calls[].call_id`. It is `null` until the call first dials. Each retry is a new call with a new `call_id` |
+| [Campaign API: List attempts](./campaigns.mdx#list-attempts) | `call_id` on each attempt with `triggered: true` |
+| [Pre-Webhook](/agents/voice-agent/webhook) | `call_id` in the request: a query parameter when the webhook is a `GET`, the JSON body otherwise. Keep it out of your web server's access log |
+| An agent tool | `{{current_user.call_id}}`, or the full URLs `{{current_user.control_url}}` and `{{current_user.observer_url}}`, in the tool's URL, headers or body |
+
+:::note Don't send commands from inside your Pre-Webhook handler
+The agent waits for your Pre-Webhook to answer before it joins the call. Reply first, then send commands.
+:::
+
+## Endpoints
+
+:::note Base path
+These endpoints are served at the **root** of your DronaHQ host, for example `https://<your-dronahq-host>/voice/control/{call_id}`. There is no `/api/v1` prefix.
+:::
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/voice/control/{call_id}` | [Get call status](#get-call-status) |
+| `POST` | `/voice/control/{call_id}` | [Send a command](#send-a-command). The body's `type` picks it |
+| `POST` | `/voice/observer/{call_id}` | [Listen in](#listen-in): a listen-only token |
+
+`call_id` is 32 hexadecimal characters. Anything else is a `422`.
+
+---
+
+## Get call status
+
+`GET /voice/control/{call_id}`
+
+The state the call is in, and which commands it accepts right now. It also answers for ended calls, for 30 days.
+
+```bash
+curl -X GET https://<your-dronahq-host>/voice/control/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "call_id": "7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47",
+  "agent_id": "a1d3c9e2-5b7f-4e10-9c3a-2f6b8d0e4a17",
+  "channel_id": 1042,
+  "direction": "outbound",
+  "status": "in_progress",
+  "controllable": true,
+  "capabilities": ["say", "add_context", "end_call", "transfer"],
+  "created_by": { "kind": "api_key", "id": "5b1e0c3a-8d2f-4a6e-9b7c-1d0e2f3a4b5c" },
+  "metadata": { "crm_id": "C-1009" },
+  "started_at": "2026-11-11T10:14:05.120000Z",
+  "ended_at": null,
+  "ended_reason": null
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `call_id` | string | The call |
+| `agent_id` | string | The voice agent on the call |
+| `channel_id` | integer | Your workspace |
+| `direction` | string | `outbound`, `inbound` or `web` |
+| `status` | string | `initiating`, `ringing`, `in_progress` or `ended`. See [Status](#status) |
+| `controllable` | boolean | `true` only while `status` is `in_progress` |
+| `capabilities` | array of strings | The command `type`s a `POST` accepts right now. `ping` is never listed, but works until the call ends |
+| `created_by` | object | What placed the call, as `kind` and `id`. See [Who placed the call](#who-placed-the-call) |
+| `metadata` | object | Your own data for the call: the `metadata` you sent with a dispatch, or a campaign contact's row. `{}` otherwise |
+| `started_at` | string or null | UTC, ISO-8601 |
+| `ended_at` / `ended_reason` | string or null | Set once the call has ended. `ended_reason` is one of the [end reasons](./calls.mdx#end-reasons) |
+
+Every field is always present, as `null` when it has no value.
+
+:::note Read `created_by` and `metadata` while the call is live
+Once the call has ended, `created_by` reads `{"kind": "unknown", "id": null}` and `metadata` is `{}`.
+:::
+
+### Status
+
+| `status` | Meaning |
+|---|---|
+| `initiating` | The call is being set up. The agent hasn't joined yet or, on an outbound call, the callee's leg hasn't connected |
+| `ringing` | Outbound only, on carriers that report ringing: the callee's phone is ringing. Other outbound calls go straight from `initiating` to `in_progress` |
+| `in_progress` | The agent and the other party are both on the call |
+| `ended` | The call is over. `ended_at` and `ended_reason` can still be `null` for a moment after it ends |
+
+Outbound calls go `initiating` → `ringing` → `in_progress` → `ended`. Inbound and web calls skip `ringing`.
+
+Which commands each call accepts, by status:
+
+| Command | `outbound` | `inbound` | `web` |
+|---|---|---|---|
+| `say`, `add_context` | `in_progress` | `in_progress` | `in_progress` |
+| `end_call` | `initiating`, `ringing`, `in_progress` | `initiating`, `in_progress` | `initiating`, `in_progress` |
+| `transfer` | `in_progress` | `in_progress` | never |
+| `assistant_control` | never | never | `in_progress` |
+| `ping` | any status except `ended` | any status except `ended` | any status except `ended` |
+
+### Who placed the call
+
+| `kind` | `id` | Placed by |
+|---|---|---|
+| `api_key` | The API key's ID | [Outbound Call Dispatch](./dispatch.mdx) |
+| `campaign` | The `campaign_uuid` | A campaign |
+| `inbound` | `null` | Someone calling one of your numbers |
+| `session` | The user's ID | The app: a **Test call** from the agent builder, or a web call from the playground or a published widget |
+| `unknown` | `null` | Anything else, and every call once it has ended |
+
+---
+
+## Send a command
+
+`POST /voice/control/{call_id}`
+
+One command per request. `type` picks the command, and the other fields depend on it.
+
+| `type` | What it does | Required fields |
+|---|---|---|
+| [`say`](#say) | Speaks a line in the agent's voice | `content`, `command_id` |
+| [`add_context`](#add_context) | Gives the agent a note without saying anything | `message.content` |
+| [`assistant_control`](#assistant_control) | Mutes or unmutes the agent or the caller (web calls) | `action` |
+| [`end_call`](#end_call) | Hangs up | `command_id` |
+| [`transfer`](#transfer) | Hands a phone call to a number or SIP address | `target`, `command_id` |
+| [`ping`](#ping) | Checks the call answers. Changes nothing | none |
+
+Which command works when is in the table under [Status](#status).
+
+**Unknown fields are refused.** A field the command doesn't take is a `400`, the same as a missing or invalid one. The response's `errors` names the field.
+
+### Command IDs and retries
+
+`command_id` is your ID for one command: 8–64 characters, using letters, digits, `-` and `_`. It is required for `say`, `end_call` and `transfer`, and optional for the rest.
+
+It makes retries safe. Send the same request again with the same `command_id` and you get the first answer back, instead of the command running twice.
+
+- **Make a new one for every command,** for example a UUID, and keep it until you have an answer.
+- **Always send one, even where it is optional.** Without it, every retry runs the command again: `add_context` adds the note twice.
+- **While the first request is still running,** a retry gets `409 command_in_progress` with `Retry-After: 2`. Wait and retry to get the result.
+- **Once it has finished,** a retry gets the same status code and body as the first time: `200`, `202` or `500`, with the header `Idempotent-Replayed: true`.
+- **A `command_id` is scoped to the call.** Reusing one on the same call with a different body returns the first command's result, and the new body does not run.
+- **After a `503` or `504`,** the command may or may not have run. A retry with the same `command_id` sends it again.
+- **Once the call has ended,** a retry gets `409 call_ended`, not the stored result.
+
+### `say`
+
+Speaks a line now, in the agent's voice.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `content` | string | Yes | What to say, 1–2000 characters |
+| `command_id` | string | Yes | See [Command IDs and retries](#command-ids-and-retries) |
+| `interrupt` | boolean | No | Default `true`: cut off whatever the agent is saying first. `false` plays the line after it |
+| `allow_barge_in` | boolean | No | Default `true`: the caller can talk over the line. If the caller is mid-sentence, the line waits until they stop, for up to 20 seconds, and is then dropped. `false` speaks at once and can't be interrupted |
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/control/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "say",
+    "command_id": "say-7f3e2a9c41b84d0e",
+    "content": "One moment please, I am checking that for you."
+  }'
+```
+
+#### Response — `200 OK`
+
+```json
+{
+  "ok": true,
+  "type": "say",
+  "command_id": "say-7f3e2a9c41b84d0e",
+  "applied": "scheduled",
+  "result": { "interrupted": true, "speech_id": "speech_4b1c9e2d7a0f" },
+  "latency_ms": 184
+}
+```
+
+The `200` means the line is scheduled, not that it has played. `applied` is `scheduled`, or `deferred` while the line waits for the caller to stop talking. The transcript and the agent's memory of the conversation get only the part the caller heard.
+
+### `add_context`
+
+Gives the agent information without saying anything aloud.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message.content` | string | Yes | The text, 1–2000 characters |
+| `message.role` | string | No | `system` (default): a note the agent reads at its next turn. It is never spoken and never attributed to the caller. `user`: added as if the caller had said it |
+| `trigger_response` | boolean | No | For `role: user` only. Default `true`: the agent answers it now. `false` adds it silently. Ignored for `system` |
+| `command_id` | string | No | Send one anyway. See [Command IDs and retries](#command-ids-and-retries) |
+
+```json
+{
+  "type": "add_context",
+  "command_id": "ctx-91c2e7d04a3f",
+  "message": { "role": "system", "content": "Payment of 1500 received just now. Thank the caller." }
+}
+```
+
+`applied` is `immediate`, or `deferred` when the agent was mid-reply and answers after it.
+
+### `assistant_control`
+
+Web calls only. Mutes or unmutes one side of the call.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `mute` or `unmute` |
+| `target` | string | No | `agent` (default) silences the agent's voice. `caller` stops the caller's audio reaching the agent, so nothing they say is heard or transcribed |
+| `command_id` | string | No | Send one anyway. See [Command IDs and retries](#command-ids-and-retries) |
+
+The response's `state` reports both sides, for example `{"agent_muted": true, "caller_muted": false}`. On a phone call this command is a `409 not_supported`.
+
+### `end_call`
+
+Hangs up. It works from `initiating`, so you can stop a call that is still ringing.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command_id` | string | Yes | See [Command IDs and retries](#command-ids-and-retries) |
+| `goodbye_message` | string | No | Up to 500 characters, spoken before the agent hangs up. It replaces the agent's own termination message. Without it, the agent's termination message plays if it has one, and otherwise the call ends with no goodbye |
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/control/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "end_call",
+    "command_id": "end-5e8a1f3c9b2d",
+    "goodbye_message": "Thanks for your time. Goodbye!"
+  }'
+```
+
+#### Response — `200 OK`
+
+```json
+{
+  "ok": true,
+  "type": "end_call",
+  "command_id": "end-5e8a1f3c9b2d",
+  "applied": "scheduled",
+  "result": { "goodbye": true },
+  "latency_ms": 41
+}
+```
+
+The `200` means the hang-up is scheduled. When it lands, the call reads `ended`, with `ended_reason` `api-terminated`.
+
+### `transfer`
+
+Phone calls only. Hands the call to another number or SIP address.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `target` | string | Yes | Where to send the call, 3–128 characters. A phone number in E.164 (`+14155550100`), or a SIP URI (`sip:support@pbx.example.com`) |
+| `command_id` | string | Yes | See [Command IDs and retries](#command-ids-and-retries) |
+| `target_type` | string | No | `phone` (default) or `sip`. Set `sip` when `target` is a SIP URI |
+| `transfer_mode` | string | No | `blind` (default) connects straight away. `warm` plays a short briefing to whoever answers before connecting the caller |
+| `announcement` | string | No | Up to 500 characters, said to the caller just before the transfer. In `warm` mode it is also the briefing |
+| `summary` | string | No | `warm` only. Up to 2000 characters: the briefing, used when there is no `announcement`. Leave both out and the agent writes a briefing from the conversation |
+
+:::warning Send `target` in exactly this form
+The target goes to your carrier as you wrote it. Use `+` and the full number, or a URI that starts with `sip:`. Other forms (`tel:+…`, a number without `+`, a SIP address without `sip:`) are corrected only on numbers connected through SIP Trunking. On other carriers the transfer fails.
+:::
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/control/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "transfer",
+    "command_id": "xfer-2b9d4e1a7c3f",
+    "target": "+14155550100",
+    "transfer_mode": "warm",
+    "summary": "Wants to cancel their plan. Already offered 20% off and declined."
+  }'
+```
+
+#### Response — `202 Accepted`
+
+```json
+{
+  "ok": true,
+  "type": "transfer",
+  "command_id": "xfer-2b9d4e1a7c3f",
+  "applied": "accepted",
+  "result": { "mode": "warm_transfer_with_summary", "target_type": "phone" },
+  "latency_ms": 96
+}
+```
+
+:::warning `202` means accepted, not transferred
+The target is not checked up front. The `202` means the call took the command and started the transfer.
+
+- **If the carrier takes it,** the agent leaves and the call reads `ended`, with `ended_reason` `supervisor-transferred`. Whether anyone answers at `target` happens on the carrier's side and isn't reported here.
+- **If it fails,** for example a malformed target or a carrier refusal, the agent tells the caller it couldn't transfer them and the call carries on. `status` stays `in_progress`, and the call's [events](./calls.mdx#get-events) show `call.transferFailed`.
+- **Don't rely on `ended_reason`.** It reads `supervisor-transferred` even when the transfer failed and the call ended later.
+- **A `500` instead of a `202`** means the call refused the transfer straight away. `result.detail` says why.
+:::
+
+:::note Send a `summary` with `warm`
+Without a `summary` or an `announcement`, the agent writes the briefing first. That can take longer than the call has to answer, so you can get a `500` with `handler_timeout` while the transfer still goes ahead. Check the call's status before you send it again. Carriers that can't play a briefing do a `blind` transfer instead.
+:::
+
+### `ping`
+
+Checks the call answers, end to end. It changes nothing. It works at any status until the call ends, and returns `result: {"pong": true, ...}`.
+
+### Response fields
+
+| Field | Description |
+|---|---|
+| `ok` | `true` when the call carried out the command |
+| `type` | The command |
+| `command_id` | Yours, or one the server made up if you sent none |
+| `applied` | `say`: `scheduled` or `deferred`. `add_context`: `immediate` or `deferred`. `end_call`: `scheduled`. `transfer`: `accepted`. Not sent for `assistant_control` and `ping` |
+| `state` | `assistant_control` only: `agent_muted` and `caller_muted` |
+| `result` | Anything else the command reported. On failure, `error` and `detail` |
+| `latency_ms` | How long the call took to answer |
+
+Fields with no value are left out. Every command answers `200` except `transfer`, which answers `202`. A `500` with `ok: false` means the call refused the command. See [Errors](#errors). An answer replayed for a `command_id` you already sent carries the header `Idempotent-Replayed: true`, the same one [dispatch](./dispatch.mdx#idempotency) sends.
+
+---
+
+## Listen in
+
+`POST /voice/observer/{call_id}`
+
+Returns a listen-only token for the call's audio. Connect to it with a [LiveKit client SDK](https://docs.livekit.io/home/client/connect/).
+
+### Body
+
+Optional.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `identity` | string | No | The listener's name in the call: `observer_` followed by letters, digits, `-` or `_`, up to 64 characters in all. Leave it out and one is generated. Send the same one again to refresh a token |
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/observer/7c2e9b4d1f6a4e3b9d0c5a8f2b1e6d47 \
+  -H "Content-Type: application/json" \
+  -d '{"identity": "observer_supervisor_17"}'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "livekit_url": "wss://<livekit-host>",
+  "room": "<room-name>",
+  "identity": "observer_supervisor_17",
+  "expires_at": "2026-11-11T11:20:05.120000Z"
+}
+```
+
+```js
+import { Room, RoomEvent } from "livekit-client";
+
+const room = new Room();
+room.on(RoomEvent.TrackSubscribed, (track) => {
+  if (track.kind === "audio") document.body.appendChild(track.attach());
+});
+await room.connect(livekit_url, token);
+```
+
+- **Listen only.** The token can't send audio or data, and joins this call only.
+- **From the start.** It works from `initiating`, so a supervisor can be in before the callee answers. Once the call is over it is a `409 call_ended`.
+- **Expiry.** The token lasts until the agent's maximum call duration has passed, plus a minute, and at most 4 hours. It is checked when you connect and when you reconnect. For a fresh one, send the request again with the same `identity`.
+- **Silent.** By default neither the caller nor the agent is told that someone is listening.
+- **It contains the `call_id`.** Give the token only to someone you would trust to control the call.
+
+---
+
+## Errors
+
+Errors other than a refused command come back under `detail`:
+
+```json
+{
+  "detail": {
+    "error": "not_ready",
+    "message": "'say' is not available while the call is 'ringing'",
+    "status": "ringing",
+    "capabilities": ["end_call"]
+  }
+}
+```
+
+:::note The retry rule
+**4xx is final,** except a `409` or `429` that carries `Retry-After`: wait that many seconds and send the same request again. **On a `503`, a `504`, or a `500` without `ok: false`, retry with the same `command_id`.** A `500` with `ok: false` is the call's own answer, and the same `command_id` returns it again.
+:::
+
+| HTTP status | `error` | Cause | What to do |
+|---|---|---|---|
+| `400` | `invalid_request` | An unknown `type`, a missing, invalid or unknown field, or a bad `command_id`. `errors` lists up to five `{field, message}` | Fix the body |
+| `404` | `call_not_found` | No such call, or it is older than 30 days. Also briefly just after dispatch shows the `call_id`, and just after a call ends until its record is written | Check the `call_id` |
+| `409` | `not_ready` | Not available at this status yet, for example `say` while ringing. Includes `status` and `capabilities`. `Retry-After: 2` | Retry after 2 seconds |
+| `409` | `not_supported` | Never available on this kind of call: `transfer` on a web call, `assistant_control` on a phone call | Don't retry |
+| `409` | `call_ended` | The call is over | Don't retry |
+| `409` | `command_in_progress` | With `Retry-After: 2`: this `command_id` is still running | Retry after 2 seconds to get its result |
+| `409` | `command_in_progress` | With no `Retry-After`: this `command_id` was used and there is no result to return | Check the call's status before you send the command again with a new `command_id` |
+| `422` | — | The `call_id` isn't 32 hexadecimal characters, the body isn't a JSON object, or the observer body is invalid. `detail` is an array | Fix the request |
+| `429` | `rate_limited` | Over the [rate limit](#rate-limits) for this command on this call. `message` names the limit. `Retry-After: 60` | Retry after 60 seconds |
+| `500` | none; the body has `ok: false` | The call refused the command. `result.error` is `handler_error` (`result.detail` says why), `handler_timeout` (didn't finish in time, and may still complete) or `session_stopped` (the agent has left) | Fix the cause, then send it with a new `command_id`. After `handler_timeout`, check the call's status first |
+| `500` | none | `{"detail": "Internal Server Error"}`: an unexpected failure | Retry with the same `command_id` |
+| `503` | `upstream_unavailable` | A service the call depends on is unavailable, or the command couldn't be delivered to the call | Retry with the same `command_id` |
+| `504` | `ack_timeout` | The call didn't confirm within about 5 seconds. The command may have run | Check the call's status, or retry with the same `command_id`, which sends it again |
+
+## Rate limits
+
+| Command | Requests per call, per minute |
+|---|---|
+| `end_call`, `transfer` | 20 |
+| `say`, `add_context`, `assistant_control` | 120 |
+| `ping` | 240 |
+
+Each call and each command type has its own count, in fixed one-minute windows. Retries count. Status requests and observer tokens are not limited.
+
+## What's Next
+
+- [Outbound Call Dispatch](./dispatch.mdx): place calls and get their `call_id`
+- [Campaign API: List attempts](./campaigns.mdx#list-attempts): the `call_id` of each campaign dial
+- [Call Data API](./calls.mdx): the transcript, events and end reason once the call is over
+- [Webhook](/agents/voice-agent/webhook): the Pre-Webhook carries the `call_id`

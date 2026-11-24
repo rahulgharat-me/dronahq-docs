@@ -98,6 +98,7 @@ module.exports.default = function ProductWidget({ title, price, description }) {
 ```
 ---
 
+
 ## Styling Widgets
 
 Widget styling must be defined directly inside the component.
@@ -131,6 +132,23 @@ module.exports.default = function ProductWidget({ title, price, description }) {
 <div className="product-card">
 ```
 You can define these classes inside your component using a *style tag* or a *CSS object*.
+
+
+
+---
+
+## Where widgets render
+
+A widget is attached to an agent. When the agent's response targets it, the
+widget renders in every chat surface:
+
+| Surface | When |
+|---|---|
+| Playground, end-user portal, embed chat | Agent responses that render as rich UI, including responses that name the widget as a template |
+| Widgets page preview | The preview renders the widget with its default data |
+
+All of them wrap the widget in the same theme provider, so the preview looks
+the way the widget will look in chat.
 
 ---
 

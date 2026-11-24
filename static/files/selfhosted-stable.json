@@ -72,18 +72,6 @@
       }
     ]
   },
-  { "timestamp": 1777453545000,
-    "tags": ["Self-Hosted", "3.10.0-stable"],
-    "heading": "Version 3.10.0-stable",
-    "cards" : [
-    
-      { "title": "Fixed",
-        "type": "fixed",
-        "points": ["Fixed an issue where required asterisk indicators were not displayed correctly when the page was re-rendered.",
-"Fixed an issue where action flows were unintentionally triggered on page load."]
-      }
-    ]
-   },
   {
     "timestamp": 1777021545000,
     "tags": ["Self-Hosted", "3.9.9-stable"],

@@ -1,0 +1,468 @@
+---
+sidebar_position: 7
+title: "Phone Numbers"
+---
+
+# Phone Numbers API
+
+The Phone Numbers API lists, adds, deletes, links and unlinks the **phone numbers** in your workspace from your own system. It does what the **Phone Numbers** screen does: a number you add here appears there, and the other way round. Linking does what picking a number in an agent's **Call Configuration** does.
+
+## When to Use This
+
+- Look up a number's `phone_uuid` to start a [campaign](/agents/voice-agent/api/campaigns) from it.
+- Add the numbers you buy at Twilio, Plivo or Vobiz without opening DronaHQ.
+- Link a number to an agent, so the agent answers calls to it or calls from it.
+- Take a number away from an agent, or out of the workspace, when you stop using it.
+
+This API can't change a number once it is added. To change a number's label or credentials, delete it and add it again.
+
+## Prerequisites
+
+- An [API Key](/agents/developer/api-keys) with the **Phone numbers** scope.
+- The older **Voice Agent** scope doesn't give access to this API. To use an older key that has only **Voice Agent**, edit it under **Developer → API Keys** and add the **Phone numbers** scope.
+- The key's **Agent Access** decides which numbers it reaches. See [Keys limited to some agents](#keys-limited-to-some-agents).
+
+## Authentication
+
+Every request must include your key, in the **`api-key`** header or as a Bearer token. See [API Keys](/agents/developer/api-keys) for how to create one. The examples on this page use `api-key`.
+
+```
+api-key: sk_<your-secret>
+```
+
+or
+
+```
+Authorization: Bearer sk_<your-secret>
+```
+
+Every request made with one of your keys is recorded in [Request Logs](/agents/developer/request-logs), including the failures.
+
+:::note Base path
+These endpoints are served at the **root** of your DronaHQ host: `https://<your-dronahq-host>/voice/phone_numbers`. There is no `/api/v1` prefix, and the path uses an underscore.
+:::
+
+## Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/voice/phone_numbers` | [List numbers](#list-numbers) |
+| `GET` | `/voice/phone_numbers/{phone_uuid}` | [Get a number](#get-a-number) |
+| `GET` | `/voice/phone_numbers/providers` | [List providers](#list-providers) |
+| `POST` | `/voice/phone_numbers` | [Add a number](#add-a-number) |
+| `DELETE` | `/voice/phone_numbers/{phone_uuid}` | [Delete a number](#delete-a-number) |
+| `POST` | `/voice/phone_numbers/{phone_uuid}/link` | [Link a number to an agent](#link-a-number-to-an-agent) |
+| `POST` | `/voice/phone_numbers/{phone_uuid}/unlink` | [Unlink agents from a number](#unlink-agents-from-a-number) |
+
+A number has two ids, and the other APIs take different ones:
+
+| Field | Example | Taken by |
+|---|---|---|
+| `phone_uuid` | `e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63` | This API's paths, and [Campaigns](/agents/voice-agent/api/campaigns) as `from_phone_uuid` |
+| `phone_number` | `+14155550100` | [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) as `source_phone_number` |
+
+## Keys limited to some agents
+
+A number belongs to the workspace, not to one agent, so a key set to **All Agents** reaches every number. A key limited to **specific agents** reaches what its agents use:
+
+| The key | Which numbers |
+|---|---|
+| Sees | Numbers linked to one of its agents, and numbers linked to no agent: the numbers its agents can call from. A number linked only to other agents is left out of the list, and a request for it fails with `403` |
+| Adds | Any number. A new number is linked to no agent |
+| Deletes | A number whose linked agents are all on its list, and that no other agent receives inbound calls on. Otherwise it's a `403`, because deleting it would take it away from them |
+| Links | A number it sees, to one of its own agents. Naming another agent is a `403` |
+| Unlinks | Its own agents only. Naming another agent is a `403` |
+
+In what it returns, the key sees only its own agents: `agents` leaves the others out, and `inbound_taken_by` is `null` when another agent holds the number. The same goes for a refused link: the error names the agent that already answers on the number only when the key can access that agent.
+
+---
+
+## List numbers
+
+`GET /voice/phone_numbers`
+
+Returns every number the key can see, most recently added first. There are no parameters and no pagination.
+
+```bash
+curl https://<your-dronahq-host>/voice/phone_numbers \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "count": 2,
+  "phone_numbers": [
+    {
+      "phone_uuid": "e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63",
+      "phone_number": "+14155550100",
+      "label": "US support line",
+      "provider": "twilio",
+      "agents": [
+        { "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a", "agent_name": "Order Helper" }
+      ],
+      "is_linked": true,
+      "capabilities": { "voice": true, "sms": true, "mms": true, "fax": false, "sms_enabled": true },
+      "sip_trunk_uuid": null,
+      "inbound_taken_elsewhere": true,
+      "inbound_taken_by": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a"
+    },
+    {
+      "phone_uuid": "7c41a9e0-2b8d-4f63-a51e-9d0c3b6f2e18",
+      "phone_number": "+918045550123",
+      "label": null,
+      "provider": "plivo",
+      "agents": [],
+      "is_linked": false,
+      "capabilities": { "voice": true, "sms": false, "mms": false, "fax": false, "sms_enabled": false },
+      "sip_trunk_uuid": null,
+      "inbound_taken_elsewhere": false,
+      "inbound_taken_by": null
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `phone_uuid` | The number's id. See [the two ids](#endpoints) |
+| `phone_number` | The number in E.164 |
+| `label` | The name you gave it, or `null` |
+| `provider` | `twilio`, `plivo`, `vobiz` or `sip` |
+| `agents` | The agents the number is linked to, with their names. Only agents the key can access are listed |
+| `is_linked` | `true` when the number is linked to any agent, including agents the key can't access |
+| `capabilities` | What the number can do, as the provider reported it when the number was added: `voice`, `sms`, `mms`, `fax`. `sms_enabled` is the value you sent on add. The builder's SMS tool offers a number when `sms` or `sms_enabled` is `true` |
+| `sip_trunk_uuid` | For a `sip` number, the SIP trunk it calls through. Otherwise `null` |
+| `inbound_taken_elsewhere` | `true` when an agent already answers inbound calls on this number. A number answers inbound calls for one agent only; outbound calls from it aren't affected |
+| `inbound_taken_by` | The agent that answers them, or `null` if none does or the key can't access it |
+
+Provider credentials are stored encrypted and are never returned.
+
+---
+
+## Get a number
+
+`GET /voice/phone_numbers/{phone_uuid}`
+
+Returns one number, in the same shape as an item of [List numbers](#list-numbers).
+
+```bash
+curl https://<your-dronahq-host>/voice/phone_numbers/e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63 \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "phone_number": {
+    "phone_uuid": "e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63",
+    "phone_number": "+14155550100",
+    "label": "US support line",
+    "provider": "twilio",
+    "…": "…"
+  }
+}
+```
+
+A number that isn't in the key's workspace is a `404`, and so is a `phone_uuid` that isn't a valid UUID.
+
+---
+
+## List providers
+
+`GET /voice/phone_numbers/providers`
+
+Returns the telephony providers, by name. A number can be added for a provider whose `is_supported` is `true`. Use its `provider_id` as `provider` when you [add a number](#add-a-number).
+
+```bash
+curl https://<your-dronahq-host>/voice/phone_numbers/providers \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "providers": [
+    {
+      "provider_id": "twilio",
+      "provider_name": "Twilio",
+      "short_description": "…",
+      "supports_sip": true,
+      "supports_sms": true,
+      "is_supported": true
+    }
+  ]
+}
+```
+
+---
+
+## Add a number
+
+`POST /voice/phone_numbers`
+
+Adds a number you already own at a provider, as **Add Phone Number** does in the app. DronaHQ checks the credentials with the provider before it saves anything, so a wrong token or a number that isn't on the account fails with `400` and nothing is added.
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `provider` | string | Yes | `twilio`, `plivo`, `vobiz` or `sip`. See [List providers](#list-providers) |
+| `phone_number` | string | Yes | The number in E.164, for example `+14155550100` |
+| `auth_config` | object | Yes | The provider's credentials. See below. Every value is a string |
+| `label` | string | No | A name for the number, up to 128 characters |
+| `country_code` | string | No | The number's two-letter country code, for example `US`. Up to 8 characters |
+| `country_label` | string | No | The country's name. Up to 128 characters |
+| `sms_enabled` | boolean | No | `true` marks the number as able to send SMS, for when the provider doesn't report it. Default `false`. Ignored for a `sip` number, which can't send SMS |
+
+An unknown field is **rejected** with `422`, so a misspelt field fails loudly.
+
+| `provider` | `auth_config` |
+|---|---|
+| `twilio` | `account_sid`, `auth_token` |
+| `plivo` | `auth_id`, `auth_token` |
+| `vobiz` | `auth_id`, `auth_token` |
+| `sip` | `sip_trunk_uuid`: a SIP trunk set up in the app under **SIP Trunking**. The number is registered on the trunk. See [SIP trunks](/agents/voice-agent/telephony/sip-trunks/introduction) |
+
+Where to find these credentials at each provider is in the [telephony guides](/agents/voice-agent/telephony/introduction).
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/phone_numbers \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "twilio",
+    "phone_number": "+14155550100",
+    "label": "US support line",
+    "country_code": "US",
+    "sms_enabled": true,
+    "auth_config": {
+      "account_sid": "AC00000000000000000000000000000000",
+      "auth_token": "<your-twilio-auth-token>"
+    }
+  }'
+```
+
+### Response — `201 Created`
+
+```json
+{
+  "status": "success",
+  "phone_number": {
+    "phone_uuid": "e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63",
+    "phone_number": "+14155550100",
+    "label": "US support line",
+    "provider": "twilio",
+    "agents": [],
+    "is_linked": false,
+    "capabilities": { "voice": true, "sms": true, "mms": true, "fax": false, "sms_enabled": true },
+    "sip_trunk_uuid": null,
+    "inbound_taken_elsewhere": false,
+    "inbound_taken_by": null
+  }
+}
+```
+
+`phone_number` has the same shape as an item of [List numbers](#list-numbers). A new number is linked to no agent. Save `phone_uuid`: the other routes use it.
+
+:::tip Before you retry
+If a request times out, check [List numbers](#list-numbers) before sending it again: the first request may still have added the number. A retry sent after the first request finished fails with `409` (`This phone number is already added.`), but one sent while the first is still running can add the number twice.
+:::
+
+---
+
+## Delete a number
+
+`DELETE /voice/phone_numbers/{phone_uuid}`
+
+Removes a number from your workspace **permanently**, as **Delete** does in the app. A `sip` number is also removed from its SIP trunk.
+
+- The number stays yours at the provider. DronaHQ doesn't release it, so you keep paying for it there until you release it yourself.
+- **Unlink it first.** Delete doesn't take the number out of the call settings of the agents linked to it. [Unlink agents from a number](#unlink-agents-from-a-number) does.
+
+```bash
+curl -X DELETE https://<your-dronahq-host>/voice/phone_numbers/e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63 \
+  -H "api-key: sk_your-generated-secret-here"
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "message": "Phone number deleted successfully",
+  "phone_uuid": "e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63",
+  "phone_number": "+14155550100"
+}
+```
+
+A second delete of the same number returns `404`.
+
+---
+
+## Link a number to an agent
+
+`POST /voice/phone_numbers/{phone_uuid}/link`
+
+Links the number to an agent, as picking it in the agent's **Call Configuration** does in the app. The number is added to the agent's inbound or outbound numbers; numbers already there stay.
+
+- **Inbound**: the agent answers calls to this number. A number answers inbound calls for one agent only, so a number another agent already answers on is refused with `409`. To move it, [unlink](#unlink-agents-from-a-number) it from that agent and publish that agent: until then, its published version still answers on the number.
+- **Outbound**: the agent can call from this number. Several agents can call from the same number. The agent's **default** outbound number is the one a [dispatch](/agents/voice-agent/api/dispatch) that sends no `source_phone_number` calls from. An agent's first outbound number becomes its default.
+
+:::note Publish to make it live
+Linking changes the agent's **draft**. Inbound calls to the number reach the agent, and dispatch calls from its default number, only once the agent is published. The response's `publish_state` tells you whether it needs to be. To publish, send `{"publish": true}` to [Update an agent](/agents/voice-agent/api/voice-agents#update-an-agent). See [Draft and published](/agents/voice-agent/api/voice-agents#draft-and-published).
+:::
+
+### Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `agent_uuid` | string | Yes | The voice agent to link the number to |
+| `direction` | string | Yes | `inbound` or `outbound`. To use a number both ways, link it twice |
+| `is_default` | boolean | No | Outbound only: `true` makes this the agent's default outbound number. Default `false`, which leaves the agent's default where it is |
+
+An unknown field, a `direction` other than `inbound` or `outbound`, or `is_default` with `inbound` is rejected with `422`.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/phone_numbers/e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63/link \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{ "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a", "direction": "outbound", "is_default": true }'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "message": "Phone number linked successfully",
+  "phone_uuid": "e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63",
+  "agent_uuid": "3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a",
+  "direction": "outbound",
+  "changed": true,
+  "is_default": true,
+  "linked_agent_uuids": ["3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a"],
+  "publish_state": "unpublished_changes"
+}
+```
+
+| Field | Description |
+|---|---|
+| `changed` | `false` when the number was already linked to the agent that way, so nothing was saved |
+| `is_default` | For an outbound link, whether this is now the agent's default outbound number. `null` for an inbound link |
+| `linked_agent_uuids` | The agents the number is linked to now. Only agents the key can access are listed |
+| `publish_state` | `unpublished_changes`: the draft differs from the published version, so publish to make the link live. `not_published`: the agent has never been published. `up_to_date`: the published version already has it. `null` if it couldn't be read; the link is saved either way |
+
+Linking is safe to repeat. A link that is already there changes nothing, and `message` says `Phone number already linked`.
+
+When another agent already answers inbound calls on the number, the `409` says so. `inbound_taken_by` names that agent if the key can access it, and is `null` otherwise, or when the number answers in another workspace:
+
+```json
+{
+  "detail": {
+    "message": "+14155550100 (already answering on “Order Helper”) is already receiving inbound calls. A number can only take inbound calls for one agent — free it up there first, or use it here for outbound only.",
+    "inbound_taken_by": "9d2f4a6b-8c1e-4b3d-a5f7-6e0c2b4d8a1f"
+  }
+}
+```
+
+---
+
+## Unlink agents from a number
+
+`POST /voice/phone_numbers/{phone_uuid}/unlink`
+
+Takes the number away from agents, as **Unlink** does in the app. The number is also removed from each of those agents' call settings, inbound and outbound. The number itself stays in your workspace.
+
+### Body
+
+The body is optional.
+
+| Field | Type | Description |
+|---|---|---|
+| `agent_uuids` | array of strings | The agents to unlink, at least one. An agent that isn't linked to the number is skipped. Leave the field out to unlink every agent the key can access: with **All Agents**, every agent the number is linked to |
+
+An unknown field, or an empty `agent_uuids`, is rejected with `422`.
+
+### Example request
+
+```bash
+curl -X POST https://<your-dronahq-host>/voice/phone_numbers/e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63/unlink \
+  -H "api-key: sk_your-generated-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{ "agent_uuids": ["3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a"] }'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "message": "Phone number unlinked successfully",
+  "phone_uuid": "e5b0c2d4-6a1f-4c3e-9b7d-2f8a1c0e4d63",
+  "unlinked_agent_uuids": ["3b7e1c2a-5d4f-4e8a-9b6c-0f1e2d3c4b5a"],
+  "linked_agent_uuids": []
+}
+```
+
+| Field | Description |
+|---|---|
+| `unlinked_agent_uuids` | The agents this request unlinked |
+| `linked_agent_uuids` | The agents still linked to the number. Only agents the key can access are listed |
+
+Unlinking is safe to repeat. When there is nothing to unlink, the request still succeeds, `unlinked_agent_uuids` is empty, and `message` says why: `Phone number is already unlinked`, or `Phone number is not linked to the requested agent(s)`.
+
+---
+
+## Errors
+
+### Error shapes
+
+Every error has a `detail` field, but its shape depends on the error:
+
+| `detail` is | When |
+|---|---|
+| A string, for example `"Phone number not found."` | `401` and `403` from the key or its Agent Access, and `404` for a number or, on link, an agent |
+| An object with a `message` | A number or credentials the provider refused (`400`), a SIP trunk that wasn't found (`404`), a number that is already added (`409`), a number another agent answers on (`409` on link, with `inbound_taken_by`), and `500` |
+| An array of errors | A body that fails validation (`422`): an unknown field, a missing `provider` or `phone_number`, a value that isn't a string in `auth_config`, a field over its length limit, an empty `agent_uuids`, or on link a missing `agent_uuid`, a wrong `direction`, or `is_default` with `inbound` |
+
+```json
+{ "detail": { "status": "error", "message": "This phone number is already added." } }
+```
+
+```json
+{ "detail": [ { "type": "extra_forbidden", "loc": ["body", "phone"], "msg": "Extra inputs are not permitted", "input": "+14155550100" } ] }
+```
+
+### Status codes
+
+| HTTP status | Cause | Fix |
+|---|---|---|
+| `400` | Add only: the provider isn't supported, `phone_number` isn't E.164, the credentials are missing (a `sip_trunk_uuid` for `sip`), or the provider refused the credentials or the number. `detail.message` says which | Fix the field the message names. Check the credentials in the provider's console |
+| `401` | The key is missing, unknown, disabled or expired | Check the key under **Developer → API Keys**: it must be enabled and not expired |
+| `403` | The key lacks the **Phone numbers** scope | Add **Phone numbers** to the key |
+| `403` | The key's **Agent Access** doesn't reach the number, or the delete, link or unlink touches agents outside it | See [Keys limited to some agents](#keys-limited-to-some-agents) |
+| `404` | No number with this `phone_uuid` in the key's workspace, or the `phone_uuid` isn't a valid UUID. On add: the `sip_trunk_uuid` isn't a SIP trunk in your workspace. On link: `agent_uuid` isn't a voice agent in your workspace | Check the id with [List numbers](#list-numbers), or the agent with [List agents](/agents/voice-agent/api/voice-agents#list-agents). A number in another workspace is a `404` too |
+| `409` | Add: the number is already in your workspace | Nothing to do: it was added. Find it with [List numbers](#list-numbers) |
+| `409` | Link: another agent already answers inbound calls on the number | Unlink it from that agent and publish that agent, or link it here as `outbound` |
+| `422` | The body is invalid | Read `detail` |
+| `500` | Unexpected server error. `detail.message` names the action, for example `Could not add the phone number.` | Retry; contact support if it persists |
+
+## What's Next
+
+- [API Keys](/agents/developer/api-keys): scopes and Agent Access
+- [Voice Agents](/agents/voice-agent/api/voice-agents): publish an agent so a linked number goes live
+- [Campaigns](/agents/voice-agent/api/campaigns): call a list of contacts from a number, by `phone_uuid`
+- [Outbound Call Dispatch](/agents/voice-agent/api/dispatch): place calls from a number, by `phone_number`
+- [Telephony](/agents/voice-agent/telephony/introduction): set up numbers and SIP trunks with each provider
+- [Request Logs](/agents/developer/request-logs): see what your integration sent

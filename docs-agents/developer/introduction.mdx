@@ -9,21 +9,28 @@ The Developer section gives you two things: a way to **authenticate API traffic*
 
 | Surface | What it is | When to use |
 |---|---|---|
-| **API Keys** | A secret token (`sk_...`) scoped to one or more agent types and (optionally) specific agents | Calling DronaHQ APIs from your backend, scripts, or third-party tools |
+| **API Keys** | A secret token (`sk_...`) whose scopes decide which APIs it can call, optionally limited to specific agents | Calling DronaHQ APIs from your backend, scripts, or third-party tools |
 | **Request Logs** | A 30-day rolling feed of every API request authenticated by your keys | Debugging integrations, auditing usage, investigating errors |
 
 A typical setup looks like this:
 
 1. Create an API key with the smallest set of scopes the integration needs.
-2. Use the key from your application via the **`api-key`** header.
+2. Use the key from your application, in the **`Authorization: Bearer`** header or the **`api-key`** header.
 3. When something doesn't behave as expected, open **Request Logs** and filter by that key to see exactly which calls hit DronaHQ and how they responded.
 
 ## What you can call with a key
 
 | API | Scope needed | What it does |
 |---|---|---|
-| [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) | Voice Agent | Queue one-off outbound calls and track them as a batch |
-| [Campaigns](/agents/voice-agent/api/campaigns) | Voice Agent | Create, schedule, and control outbound campaigns, and add contacts to them |
+| [Voice Agents](/agents/voice-agent/api/voice-agents) | Voice agents | Create, read, update and delete voice agents |
+| [Call Data](/agents/voice-agent/api/calls) | Calls | Read your calls, with their transcripts and recordings |
+| [Outbound Call Dispatch](/agents/voice-agent/api/dispatch) | Calls | Queue one-off outbound calls and track them as a batch |
+| [Campaigns](/agents/voice-agent/api/campaigns) | Campaigns | Create, schedule, and control outbound campaigns, and add contacts to them |
+| [Phone Numbers](/agents/voice-agent/api/phone-numbers) | Phone numbers | List, add, delete and unlink your phone numbers |
+| [Knowledge Bases](/agents/developer/knowledge-bases) | Knowledge bases | Create and delete knowledge bases, and add or remove their text, Q&A and file sources |
+| [Structured Outputs](/agents/developer/structured-outputs) | Structured outputs | Create, change, copy and delete structured outputs, read the library, and test them against a finished call or chat |
+
+Each scope gives the key both read and write access to its API.
 
 :::note These are server-to-server APIs
 The `api-key` header is not on the CORS allow-list, so browsers cannot call these endpoints directly. Call them from your backend — and never ship a key to a browser or mobile client, since a key is a workspace-wide secret.
