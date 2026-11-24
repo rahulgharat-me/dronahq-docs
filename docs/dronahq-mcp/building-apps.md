@@ -59,7 +59,7 @@ Open the app in Studio and switch to **Code View** to see what the agent wrote:
 * `src/components/`: the screens and UI
 * `src/lib/`: the data layer that calls your connectors
 
-Use **Open in VS Code** in the footer to edit locally with the DronaHQ extension.
+Use **Open in VS Code** in the footer to edit locally with the DronaHQ extension. See [Files and code](../vibe-apps/files-and-code.md) for everything you can do in Code View.
 
 ### 5. Preview the app
 
@@ -76,9 +76,12 @@ Switch to **Preview** and check that:
 
 #### Preview as another user
 
-To check what a specific person sees, use the user selector in the preview footer. Search for a user and pick them. The preview then runs with that person's name, email and groups, so you can check permission-based screens without signing in as them.
+To check what a specific person sees, use the user selector in the preview footer. Search for a user and pick them. The preview then runs with that person's name, email and groups, so you can check permission-based screens without signing in as them. See [Preview](../vibe-apps/preview.md) for this, switching environments and selecting elements.
 
-<!-- SCREENSHOT: preview-as-user.png — the preview footer user selector open with a search -->
+<figure>
+  <Thumbnail src="/img/vibe-apps/preview-as-user.png" alt="Choosing a user to preview as" width="70%" />
+  <figcaption align="center"><i>Choosing a user to preview as</i></figcaption>
+</figure>
 
 ### 6. Iterate
 
@@ -99,7 +102,7 @@ To get the most useful log:
 1. Open **Preview** and reproduce the problem once.
 2. Tell the agent what went wrong.
 
-Passwords, tokens and other sensitive headers are removed from the log, and long responses are shortened. The log isn't shown in the app's file list.
+Passwords, tokens and other sensitive headers are removed from the log, and long responses are shortened. The log isn't shown in the app's file list. To read the same activity yourself, see [Console and network logs](../vibe-apps/console-and-network.md).
 
 ## Save versions and publish
 
@@ -127,4 +130,4 @@ To rebuild an existing DronaHQ low-code app as a Vibe app, ask the agent to conv
 
 ## Usage
 
-Writing a file (`vibe_write_file`) and saving the app (`vibe_save_app`) each count as one Vibe task toward your plan's usage. Reading files and previewing don't.
+Writing a file (`vibe_write_file`) and saving the app (`vibe_save_app`) each count as one Vibe task toward your plan's usage. Reading a file (`vibe_read_file`) or getting a preview link (`vibe_preview_url`) doesn't. Some actions in Studio also use tasks, such as reloading the preview. See [Credits and tasks](../vibe-apps/chat.md#credits-and-tasks).

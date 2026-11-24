@@ -254,3 +254,4 @@ Each person picks their workspace when they sign in. This URL works only with si
 
 * Learn how [sign-in and access tokens](./sign-in-and-access-tokens.md) work
 * [Build your first app](./building-apps.md)
+* Find your way around the [Vibe app builder](../vibe-apps/overview.md) in Studio
