@@ -1,295 +1,257 @@
 ---
-sidebar_position: 2
-title: "Getting Started"
+sidebar_position: 1
+title: "Overview"
 pagination_prev: null
 ---
 import VideoEmbed from "@site/src/components/VideoEmbed";
-import Image from '@site/src/components/Image';
-import VersionedLink from '@site/src/components/VersionedLink';
 import Thumbnail from '@site/src/components/Thumbnail';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+# DronaHQ MCP
 
-# Overview
+DronaHQ MCP connects your DronaHQ workspace to an AI client such as Claude Code, Claude, Cursor, VS Code or Windsurf, over the Model Context Protocol (MCP). Your AI client gets more than a place to write frontend code. It gets a production backend it can build and ship on: authentication, role-based access control (RBAC), a secrets vault, database and API connectors, environments, hosting and audit logging.
 
-DronaHQ MCP connects the DronaHQ app platform to your AI coding agent like Claude Code, Codex, Cursor, Windsurf, VS Code, or any other MCP-compatible client, over the Model Context Protocol. Instead of your agent only producing frontend code, it gets a production backend it can actually deploy to, authentication, role-based access control (RBAC), a secrets vault, database and API connections, environments, hosting, and audit logging. There's no server to stand up, no CI/CD pipeline to configure, no SSL certificate to manage, and no middleware to write.
+There's no server to stand up, no CI/CD pipeline to configure, no SSL certificate to manage and no middleware to write. Building through MCP uses your own AI client, so it doesn't use DronaHQ AI credits. Writing and saving app files does count as Vibe tasks toward your plan's usage. See [Usage](./building-apps.md#usage).
 
 <figure>
   <VideoEmbed host='youtube' videoId='21eyFKVqlPE' />
 </figure>
 
-
 ## Why use DronaHQ MCP
 
-**The problem it solves:** A coding agent can generate a working admin panel or internal tool in minutes, but shipping it is where the time actually goes : deciding where it runs, who is allowed to access it, where database credentials are stored, how it reaches services behind a VPN, what a rollback looks like, and who signs off on the release. Multiply that by every internal tool your team needs, and it adds up to a significant ongoing cost.
+A coding agent can generate a working admin panel or internal tool in minutes. Shipping it is where the time goes: deciding where it runs, who can access it, where the database credentials live, how it reaches services behind a VPN, what a rollback looks like and who signs off on the release. Multiply that by every internal tool your team needs and it adds up.
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/thumbnail.png" alt="overview" />
-  
+  <Thumbnail src="/img/dronahq-mcp/thumbnail.png" alt="DronaHQ MCP overview" />
 </figure>
 
-### What you get by prompting through DronaHQ MCP
+### What you get
 
-* **RBAC built into the generated frontend:** Permissions are part of the app from the start, not added afterward
-* **A secrets vault:** Credentials never end up in your repo or your prompts
-* **Secured data access:** Databases, gRPC, REST APIs, internal microservices, and SSH tunneling are supported
-* **No backend to write:** For CRUD apps, admin panels, and internal tooling there's nothing to stand up
-* **No infrastructure to manage:** No server, deployment pipeline, certificate, or DevOps ticket
-* **SSO, auth, and granular permissions:** Already available out of the box
-* **Version history and audit logs:** Every change is attributed
+* **RBAC built into the app:** permissions are part of the app from the start, not added later
+* **A secrets vault:** credentials never end up in your repository, your prompts or your AI client
+* **Secure data access:** databases, REST and GraphQL APIs, internal services and SSH tunnels
+* **No backend to write:** for CRUD apps, admin panels and internal tools there's nothing to stand up
+* **No infrastructure to manage:** no server, deployment pipeline, certificate or DevOps ticket
+* **SSO, sign-in and granular permissions:** available out of the box
+* **Automations:** scheduled and webhook-triggered workflows, built and tested from the same chat
+* **Version history and audit logs:** every change is attributed to a person
 
-### Fit & Characteristics
+### What you can do from your AI client
 
-* **When DronaHQ MCP is the right fit:** CRUD apps, internal tooling, dashboards, and field-force apps : internal apps, admin panels, dashboards, workflows, and automations for teams that need something live quickly.
-* **When to bring your own backend instead:** Workloads with heavy proprietary logic or a genuine public-facing API surface, agentic workflows, voice agents, data/RAG agents, and agentic software delivery for teams putting AI into production.
-* **Deployment characteristics:** Self-hosted or VPC deployment, RBAC and audit logging by default, your code stays within your own environment, and it fits into your existing review process rather than replacing it.
+| Area | Examples |
+| --- | --- |
+| Apps | Create a Vibe app, write and save its files, preview it, check in a version, publish it |
+| Data | Set up a new connector, use an existing one, inspect a schema, run queries, create saved queries and HTTP operations, set up Data Agents |
+| Access | Choose who can open an app, organise apps into catalogues, create groups, invite people, deactivate and reactivate accounts |
+| Automations | Create an automation, set its trigger, add and test tasks, publish and turn it on |
 
----
+See the [tool reference](./tool-reference.md) for every tool.
 
-## How it works
+### When it's the right fit
 
-### Step 1 : Open DronaHQ Studio
+* **A good fit:** internal apps, admin panels, dashboards, CRUD apps, field-force apps, workflows and automations for teams that need something live quickly.
+* **Bring your own backend instead:** workloads with heavy proprietary logic or a public-facing API surface.
+* **Deployment:** cloud, self-hosted or in your VPC. RBAC and audit logging are on by default, and it fits into your existing review process rather than replacing it.
 
-Start DronaHQ Studio locally (e.g. `http://localhost:24314/apps`).
+## Who can use it
 
-On the home screen you will see two build paths:
+DronaHQ MCP is for the people who build in your workspace:
 
-* **Build in Studio:** Chat inside the browser
-* **Connect via MCP:** Link Cursor, Windsurf, VS Code, Claude Code, or another client to this workspace
+| Role | Can connect | Notes |
+| --- | --- | --- |
+| Workspace owner | Yes | Full access to every app and connector |
+| Admin | Yes | Full access to every app and connector. Manages users, groups, catalogue groups, connector access and MCP settings. Creating a catalogue needs an owner or super admin |
+| Creator | Yes | Works with the apps and connectors they've been given access to |
+| End user | No | End users use published apps. They can't connect an AI client. Ask an admin to make you a creator |
 
-Choose **Connect via MCP** for external AI clients.
+Your AI client always acts as you, with your role. It can never do more than you can do in Studio. See [Permissions](./permissions.md).
+
+## Getting started
+
+Connecting takes about two minutes. You add your workspace's MCP server URL to your AI client, then sign in to DronaHQ when the client asks. You don't need to copy a token.
+
+
+### Step 1: Open the Connect DronaHQ MCP drawer
+
+You can open it from several places in Studio:
+
+* **Apps home:** the **Build from your IDE via MCP** card → **Connect DronaHQ MCP**
+* **Apps tile view:** **Create app using MCP**
+* **Inside a Vibe app:** the editor menu (**Open in Cursor/Windsurf…**) → **Connect via MCP**
+* **AI chat in the builder:** **Connect via MCP** → **Connect DronaHQ MCP**
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/admin-console.png" alt="Admin Console" />
-  <figcaption align ="center"><i>Admin Console</i></figcaption>
+  <Thumbnail src="/img/dronahq-mcp/apps-home-mcp-card.png" alt="The DronaHQ MCP card on the Apps home" />
+  <figcaption align="center"><i>The DronaHQ MCP card on the Apps home</i></figcaption>
 </figure>
 
-### Step 2 : Get MCP credentials
+#### First time in DronaHQ?
 
-1. Click **Connect Vibe MCP** on the home screen.
-2. In the drawer, pick or create an MCP server (e.g. `Vibe App MCP`).
-3. Select your client tab: **Cursor**, **Windsurf**, **VS Code**, **Claude Code**, or **Manual**.
-4. Copy the generated command or config snippet. It includes:
-* Your Studio MCP endpoint URL (e.g. `http://localhost:24314/api/vibe/mcp/...`)
-* An `Authorization: Bearer` token
+New accounts, and people joining a workspace for the first time, start on a **Connect your AI client to DronaHQ** screen. It walks through the same three steps as this page: copy your MCP URL, add it to your client, and sign in when the client asks. When your client connects, the screen shows **Connected** and a **Start building** button. Use **Build in Studio instead** or **Skip for now** to go straight to Studio.
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/add-mcp-to-client.png" alt="Add MCP to AI client" />
-  <figcaption align ="center"><i>Add MCP to AI client</i></figcaption>
+  <Thumbnail src="/img/dronahq-mcp/welcome-connect-ai-client.png" alt="The first-run Connect your AI client screen" />
+  <figcaption align="center"><i>The first-run Connect your AI client screen</i></figcaption>
 </figure>
 
-Treat the token like a password. Use **Rotate org secret** or **Regenerate token** if it is exposed.
+### Step 2: Create or pick an MCP server
 
-### Step 3 : Add MCP server to your AI client
+Each workspace needs at least one MCP server. It's the address your AI clients connect to.
 
-DronaHQ Vibe MCP is a standard HTTP-transport MCP server, so it can be registered in any MCP-compatible client. Pick the tab that matches your setup.
+* If **Your MCP servers** already lists a server, select it.
+* If not, fill in **Create MCP server** and click **Create server**. The defaults (**DronaHQ MCP**, "Tools to create and manage apps via DronaHQ MCP") are fine.
 
-#### Cursor
+You can skip this step only if you connect with the workspace-wide URL and sign in (see [Use one URL for every workspace](#use-one-url-for-every-workspace)). If your workspace has no server yet, DronaHQ creates one for you when you allow access. The client tabs in Step 3, and access tokens, need a server, so don't skip this step if you plan to use them.
 
-Add the server to `.cursor/mcp.json` in your project (or your global Cursor MCP config) manaually or use the one-click button:
+<figure>
+  <Thumbnail src="/img/dronahq-mcp/drawer-servers.png" alt="Your MCP servers in the Connect DronaHQ MCP drawer" />
+  <figcaption align="center"><i>Your MCP servers in the Connect DronaHQ MCP drawer</i></figcaption>
+</figure>
+
+### Step 3: Add the server to your AI client
+
+Pick your client's tab in the drawer and follow the steps. The drawer fills in the URL of the server you selected in Step 2. If you skipped Step 2, use the [workspace-wide URL](#use-one-url-for-every-workspace) instead and sign in.
+
+:::tip Sign-in or access token?
+For Cursor, Claude Code, VS Code and Windsurf, the drawer includes an **access token** in the setup by default, so the client connects without a sign-in step. Claude and other clients always sign in with your DronaHQ account. If your admin has turned access tokens off, every client signs in. See [Sign-in and access tokens](./sign-in-and-access-tokens.md) for the differences.
+:::
+
+<Tabs>
+<TabItem value="cursor" label="Cursor" default>
+
+1. Click **Add to Cursor**. Cursor opens and adds the server.
+2. If the setup uses sign-in, click **Connect** next to the server in Cursor's MCP settings and sign in.
+
+If the button doesn't open Cursor, expand **Didn't open?** in the drawer and copy the config into `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "vibe_app_mcp": {
-      "url": "http://localhost:24314/api/vibe/mcp/<your-server-id>",
-      "headers": {
-        "Authorization": "Bearer <your-token>"
-      }
+    "dronahq_mcp": {
+      "url": "https://<your-studio>/api/vibe/mcp/<your-server-id>"
     }
   }
 }
-
 ```
 
-Reload the MCP settings panel in Cursor and confirm Vibe App MCP shows as connected.
+When the drawer includes an access token, the copied config also has a `headers` entry with `Authorization: Bearer <token>`.
 
-#### Windsurf
+</TabItem>
+<TabItem value="claude-code" label="Claude Code">
 
-Add the server to your Windsurf MCP config (`~/.codeium/windsurf/mcp_config.json` or the in-app MCP settings panel):
+Run the command from the drawer in your terminal:
 
-```json
-{
-  "mcpServers": {
-    "vibe_app_mcp": {
-      "serverUrl": "http://localhost:24314/api/vibe/mcp/<your-server-id>",
-      "headers": {
-        "Authorization": "Bearer <your-token>"
-      }
-    }
-  }
-}
-
+```bash
+claude mcp add --transport http dronahq_mcp -s user "https://<your-studio>/api/vibe/mcp/<your-server-id>"
 ```
 
-Restart Windsurf's MCP connection from the settings panel to pick up the new server.
+* **With sign-in:** run `/mcp` in Claude Code, pick the server and choose **Authenticate**. Your browser opens so you can sign in.
+* **With an access token:** the drawer's command already ends with `--header "Authorization: Bearer <token>"`. There's nothing else to do.
 
-#### VS Code
+</TabItem>
+<TabItem value="claude" label="Claude">
 
-If you're using an MCP-enabled extension (e.g. the DronaHQ extension or a generic MCP client extension), add the server via the extension's MCP settings UI, or directly to its `mcp.json`:
+1. In Claude, open **Settings → Connectors**.
+2. Click **Add custom connector** and paste the **Server URL** from the drawer.
+3. Click **Connect** and sign in with your DronaHQ account.
+
+This works anywhere Claude supports custom connectors. On Team and Enterprise plans, an owner may need to add the connector first.
+
+<!-- SCREENSHOT: claude-add-custom-connector.png — Claude's "Add custom connector" dialog with the DronaHQ URL pasted -->
+
+</TabItem>
+<TabItem value="vscode" label="VS Code">
+
+1. Click **Add to VS Code** (or **VS Code Insiders**).
+2. If the setup uses sign-in, VS Code asks you to sign in when the server starts.
+
+If the button doesn't open VS Code, expand **Didn't open?** and copy the server config into your MCP configuration:
 
 ```json
 {
   "servers": {
-    "vibe_app_mcp": {
+    "dronahq_mcp": {
       "type": "http",
-      "url": "http://localhost:24314/api/vibe/mcp/<your-server-id>",
-      "headers": {
-        "Authorization": "Bearer <your-token>"
-      }
+      "url": "https://<your-studio>/api/vibe/mcp/<your-server-id>"
     }
   }
 }
-
 ```
 
-#### Claude Code (terminal)
+</TabItem>
+<TabItem value="windsurf" label="Windsurf">
 
-Run the command copied from Studio in your terminal:
+Copy the config from the drawer into `~/.codeium/windsurf/mcp_config.json`, then refresh Windsurf's MCP servers:
 
-```bash
-claude mcp add --transport http vibe_app_mcp -s user \
-  "http://localhost:24314/api/vibe/mcp/<your-server-id>" \
-  --header "Authorization: Bearer <your-token>"
-
+```json
+{
+  "mcpServers": {
+    "dronahq_mcp": {
+      "serverUrl": "https://<your-studio>/api/vibe/mcp/<your-server-id>"
+    }
+  }
+}
 ```
 
-#### Manual (any other MCP client)
+When the drawer includes an access token, the config already contains it. Otherwise, sign in when Windsurf asks.
 
-If your client doesn't have a dedicated tab in the drawer, configure it manually using the same two values:
+</TabItem>
+<TabItem value="other" label="Other clients">
 
-* **Endpoint URL:** `http://localhost:24314/api/vibe/mcp/<your-server-id>`
-* **Transport:** HTTP
-* **Header:** `Authorization: Bearer <your-token>`
+Any client that supports remote MCP servers over HTTP can connect. Add the **Server URL** from the drawer. The client finds DronaHQ sign-in on its own (standard MCP authorization with OAuth), opens your browser and asks you to sign in.
 
-Any client that supports HTTP-transport MCP servers with custom headers can connect this way.
-
-#### Verify connection
-
-Regardless of client, confirm the Vibe App MCP server is listed and tools such as `vibe_create_app`, `vibe_write_file`, `vibe_save_app`, and `vibe_run_db_query` are available.
-
-### Step 4 : Prompt the AI to build an app
-
-Start a new session and describe what you want. Reference DronaHQ MCP explicitly so the agent uses Vibe tools instead of generic code, regardless of which client you're in.
+</TabItem>
+</Tabs>
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/user-stories.png" alt="Prompt in Cursor" />
-  <figcaption align ="center"><i>Prompt in Cursor</i></figcaption>
+  <Thumbnail src="/img/dronahq-mcp/drawer-client-tabs.png" alt="Client setup tabs in the drawer" />
+  <figcaption align="center"><i>Client setup tabs in the drawer</i></figcaption>
 </figure>
 
+### Step 4: Sign in and allow access
 
-The agent should respond with user stories for confirmation before creating the app.
+If your client uses sign-in, your browser opens a DronaHQ page:
 
-**Tips for better results:**
+1. If you aren't signed in to Studio, sign in as usual (password, Google or SSO). You come straight back.
+2. Check the account and workspace shown. To use a different workspace, click **Switch**.
+3. If your workspace has more than one MCP server, pick one.
+4. Click **Allow access**.
 
-* Confirm user stories before the agent calls `vibe_create_app`
-* Name your database connector when asked (e.g. `RAJ_mysql12`)
-* Approve the proposed table schema before DDL runs
-
-### Step 5 : Choose connector and approve schema
-
-When the app needs persistence, the agent lists your Studio connectors and proposes a schema.
-
-**Example flow:**
-
-1. Agent lists connectors (`harshPG`, `harsh_mysql`, `RAJ_mysql12`, …)
-2. You reply: `ok use RAJ_mysql12 for db connector`
-3. Agent proposes tables (e.g. `taskflow_users`, `taskflow_tasks`, …)
-4. You approve; agent runs DDL via `vibe_run_db_query`
-
-### Step 6 : AI builds source and saves to Studio
-
-The agent uses MCP tools in this order:
-
-| Tool | Purpose |
-| --- | --- |
-| `vibe_create_app` | Create new Vibe app → returns `pluginId` |
-| `vibe_write_file` | Write `index.html`, `src/main.jsx`, components, `sql/queries.sql` |
-| `vibe_run_db_query` | DDL + seed data on bound connector |
-| `vibe_build` | Bundle for quick validation |
-| `vibe_save_app` | Persist changes to Studio |
-| `vibe_preview_url` | Get preview link |
-
-Open the app in Studio:
-`http://localhost:24314/index?pluginid=<pluginId>`
+You're asked to allow access only the first time a client connects. After that, sign-in is silent.
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/code.png" alt="Review build on Studio" />
-  <figcaption align ="center"><i>Review build on studio</i></figcaption>
+  <Thumbnail src="/img/dronahq-mcp/consent-page.png" alt="The DronaHQ sign-in page" />
+  <figcaption align="center"><i>The DronaHQ sign-in page</i></figcaption>
 </figure>
 
-### Step 7 : Review generated code (Code View)
+### Step 5: Check the connection
 
-In Studio, switch to Code View to inspect the scaffold:
+Back in the drawer, **Connected clients** lists your client with when it was last used. In your AI client, check that DronaHQ tools such as `vibe_create_app`, `vibe_write_file` and `vibe_save_app` are available.
 
-* `index.html` : React, ReactDOM, Babel, Tailwind from CDN
-* `src/main.jsx` : app entry
-* `src/components/` : UI (Dashboard, Kanban, Tasks, Team, …)
-* `src/lib/db.js` : connector execute-query layer
-* `sql/queries.sql` : reference SQL blocks
-
-Use **Open in VS Code** (footer) for local editing with the DronaHQ extension if preferred.
-
-### Step 8 : Preview the running app
-
-Switch to Preview. Confirm:
-
-* **Connected badge** (live database via connector)
-* UI matches your requirements
-* Data loads from the database (not offline mock)
+On the Apps home, the MCP card now shows **Connected**, which client you used, and when. Its button changes to **Manage DronaHQ MCP**.
 
 <figure>
-  <Thumbnail src="/img/dronahq-mcp/support-ticket.png" alt="Preview of the running app" />
-  <figcaption align ="center"><i>Preview of the running app</i></figcaption>
+  <Thumbnail src="/img/dronahq-mcp/drawer-connected-clients.png" alt="Connected clients" />
+  <figcaption align="center"><i>Connected clients</i></figcaption>
 </figure>
 
-### Step 9 : Iterate with follow-up prompts
+You're ready to [build your first app](./building-apps.md).
 
-After the first build, keep the same `pluginId` and prompt for changes:
+### Use one URL for every workspace
 
-> Update TaskFlow (pluginId 7465):
-> * Replace dummy data with flowchart dealers/subjects
-> * Add update_link column and quarterly frequency
-> * Rebuild dashboard as dealer tiles with pending popup
-> * Skip WhatsApp automation for now
-> 
-> 
+The drawer gives you a URL for one MCP server: `https://<your-studio>/api/vibe/mcp/<your-server-id>`.
 
-The agent edits via `vibe_write_file` → `vibe_save_app` and updates the database via `vibe_run_db_query`.
+If you're sharing setup steps with people in different workspaces, use the workspace-wide URL instead:
 
----
+```
+https://<your-studio>/api/vibe/mcp
+```
 
-## Quick reference : MCP tools you will use most
+Each person picks their workspace when they sign in. This URL works only with sign-in, not with access tokens.
 
-| Tool | When |
-| --- | --- |
-| `vibe_list_connectors` | Pick existing SQL/REST connector |
-| `vibe_get_db_schema` | Inspect tables before/after DDL |
-| `vibe_run_db_query` | CREATE TABLE, ALTER, seed data |
-| `vibe_create_app` | New Vibe app only (once per project) |
-| `vibe_write_file` | Create or overwrite source files |
-| `vibe_save_app` | Persist to Studio (required before preview updates) |
-| `vibe_preview_url` | Get preview URL for testing |
-| `vibe_publish` | Release version (optional) |
+## Next steps
 
----
-
-## Troubleshooting
-
-| Issue | Fix |
-| --- | --- |
-| MCP tools not visible | Re-register the server in your client (re-run `claude mcp add`, reload Cursor/Windsurf MCP config, or restart the VS Code extension); check the token |
-| Preview shows mock data | Open inside Studio preview (not raw HTML); check the Connected badge |
-| `vibe_save_app` needed | Changes from `vibe_write_file` are not live until saved |
-| Automation tools fail | Automation server may be offline; app CRUD still works via connector |
-| Token expired | Regenerate in the Connect Vibe MCP drawer |
-
----
-
-## Security notes
-
-* Never commit MCP bearer tokens to git
-* Rotate tokens if shared or leaked
-* MCP runs against your local Studio instance, keep Studio reachable only on trusted networks
-* Each client (Cursor, Windsurf, VS Code, Claude Code, manual) stores the token locally in its own MCP config, treat all of them as sensitive files
+* Learn how [sign-in and access tokens](./sign-in-and-access-tokens.md) work
+* [Build your first app](./building-apps.md)
+* Find your way around the [Vibe app builder](../vibe-apps/overview.md) in Studio
