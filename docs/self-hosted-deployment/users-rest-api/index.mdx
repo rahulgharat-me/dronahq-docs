@@ -3,9 +3,11 @@ sidebar_position: 1
 title: Overview
 ---
 
-The Users REST API lets external systems manage the end users of your self-hosted DronaHQ account: list and look up users, create users, assign or remove groups, and activate or deactivate users. It is useful for keeping DronaHQ in sync with an HR system, a CRM or any other source of truth for your users.
+The Users REST API lets external systems manage the end users of your self-hosted DronaHQ account: list and look up users, create users (including SSO users), assign or remove groups, and activate or deactivate users. It is useful for keeping DronaHQ in sync with an HR system, a CRM or any other source of truth for your users.
 
-If you use an identity provider such as Okta or Microsoft Entra, consider the [SCIM 2.0 REST API](/reference/scim-2-rest-api) instead — it covers the same operations using the SCIM standard.
+To onboard users who sign in through your identity provider, use [SSO mode](/self-hosted-deployment/users-rest-api/create-users#sso-mode) on the create endpoint. It creates each user with no password and no invitation email, and assigns their groups in the same call — so you can pre-assign groups from your own admin application instead of using the **Manage Users** section of Studio.
+
+If you provision users directly from an identity provider such as Okta or Microsoft Entra, there is also a [SCIM 2.0 REST API](/reference/scim-2-rest-api) that covers the same operations using the SCIM standard.
 
 ## Base URL
 
@@ -64,7 +66,7 @@ A missing or invalid key returns `401`:
     </tr>
     <tr>
         <td><a href="/self-hosted-deployment/users-rest-api/create-users">POST /api/public/users</a></td>
-        <td>Create or invite up to 50 users</td>
+        <td>Create or invite up to 50 users, including SSO users</td>
     </tr>
     <tr>
         <td><a href="/self-hosted-deployment/users-rest-api/change-user-groups">PUT /api/public/users/&#123;user_id&#125;/actions/change_group</a></td>

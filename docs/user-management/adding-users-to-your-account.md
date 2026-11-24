@@ -75,6 +75,12 @@ Once the SSO is configured the users can login directly without having a separat
   <figcaption align = "center"><i>Add users using SSO</i></figcaption>
 </figure>
 
+:::tip Onboarding SSO users from your own admin app (`DronaHQ Self-Hosted edition` only)
+
+You can also create SSO users programmatically, with their groups pre-assigned, using [SSO mode on the Users REST API](/self-hosted-deployment/users-rest-api/create-users#sso-mode). This is useful when you want to onboard all of your users from your own admin application instead of from the **Manage Users** screen.
+
+:::
+
 ## Auto provision users using SCIM
 
 DronaHQ supports SCIM, known as the groundbreaking System for Cross-domain Identity Management, has emerged as the undisputed industry leader in effortlessly provisioning user accounts. This invaluable solution proves its worth, especially in scenarios where enterprises entrust third-party SSO providers like Okta or Azure Active Directory to oversee employee authentication. Thanks to SCIM's extraordinary capabilities, user accounts undergo automatic creation, seamless updates, and streamlined deactivation across various applications, revolutionizing the way organizations manage their workforce access.
