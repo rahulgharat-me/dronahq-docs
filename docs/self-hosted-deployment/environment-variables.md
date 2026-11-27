@@ -604,6 +604,56 @@ Persisting secret keys can introduce security risks, including:
 To mitigate these risks, ensure that environment files are securely stored, access is restricted, and keys are rotated periodically.
 :::
 
+## Debugging and Diagnostics
+
+These variables increase how much your deployment writes to its container log. Both are intended for diagnosing a
+problem, not for everyday operation — turn them off once you have captured what you need.
+
+#### `SSO_DEBUG`
+
+Adds verbose detail to the single sign-on login trace: full email addresses, the claim names your identity provider
+sent alongside the claim mapping you configured, the identity providers resolved for a user, and the full stack of any
+unexpected error.
+
+The sign-in trace itself is always on, so you only need this variable when the logged reason is not enough on its own —
+most often to diagnose a claim mapping mismatch. See
+[Troubleshoot SSO Login](/self-hosted-deployment/troubleshoot-sso-login) for how to read the output.
+
+```shell
+SSO_DEBUG=true
+```
+
+:::caution
+
+This prints real email addresses to your container log. Treat the output as personal data and set it back to `false`
+when you are done.
+
+:::
+
+#### `DEBUG`
+
+Enables verbose logging across the whole product, and additionally writes every database statement together with its
+values. It also switches on everything `SSO_DEBUG` does, so there is no need to set both.
+
+```shell
+DEBUG=true
+```
+
+:::caution
+
+This is very verbose and writes query values to the log. Prefer `SSO_DEBUG` when you are troubleshooting sign-in, and
+only fall back to `DEBUG` if that was not enough.
+
+:::
+
+:::note
+
+[`IGNORE_CALLBACK_MESSAGES`](#ignore_callback_messages) replaces an identity provider's own error description with a
+generic on-screen message. The description is still written to the log, but it is easier to leave that variable unset
+while troubleshooting sign-in.
+
+:::
+
 ## Other optional variables
 
 #### `ENCRYPTION_KEY`

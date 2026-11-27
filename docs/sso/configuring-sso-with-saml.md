@@ -69,6 +69,14 @@ Enter form with below fields -
 
 Once live, all your users belonging to above given domain will be redirected to your SSO login from both the `End User Portal` and `Creator Portal`.
 
+:::tip
+
+On a self-hosted deployment, if users cannot complete the SSO sign-in after activation, see
+[Troubleshoot SSO Login](/self-hosted-deployment/troubleshoot-sso-login). Your instance logs the reason each sign-in was
+refused, including claim mapping mismatches.
+
+:::
+
 
 ## Creating X509 public certificate
 Locate `X509Certificate` in your  SAML SSO provider `metadata` file. Create a new file with name ending with `.cer` extension with its content in below format
